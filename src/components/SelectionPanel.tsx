@@ -1,6 +1,6 @@
-import { drillCatalog, type DrillId } from "@/lib/drills";
+import { drillCatalog, type PlayableDrillId } from "@/lib/drills";
 
-export function SelectionPanel({ onSelect }: { onSelect: (id: DrillId) => void }) {
+export function SelectionPanel({ onSelect }: { onSelect: (id: PlayableDrillId) => void }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#0f1629]/95 to-[#080c16]/95 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)]">
       <div className="border-b border-white/[0.06] px-6 py-5 sm:px-8">

@@ -1,11 +1,13 @@
-import { drillCatalog, type DrillId } from "@/lib/drills";
+import { drillCatalog, type DrillId, type PlayableDrillId } from "@/lib/drills";
 
 export function WorkoutCards({
   selectedDrill,
   onStart,
+  onStartDaily,
 }: {
   selectedDrill: DrillId;
-  onStart: (id: DrillId) => void;
+  onStart: (id: PlayableDrillId) => void;
+  onStartDaily: () => void;
 }) {
   return (
     <section className="mt-10 sm:mt-14">
@@ -19,10 +21,22 @@ export function WorkoutCards({
               <h2 className="mt-1 text-xl font-semibold tracking-tight text-white sm:text-2xl">
                 Today&apos;s Cognitive Workout
               </h2>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-500">
+                Run all three drills in sequence and receive a combined Cognitive Performance Index.
+              </p>
             </div>
-            <div className="flex items-center gap-2 text-sm text-zinc-500">
-              <span className="font-mono text-[#d4af37]">3</span>
-              <span>drills live</span>
+            <div className="flex flex-col items-start gap-3 sm:items-end">
+              <div className="flex items-center gap-2 text-sm text-zinc-500">
+                <span className="font-mono text-[#d4af37]">3</span>
+                <span>drills live</span>
+              </div>
+              <button
+                type="button"
+                onClick={onStartDaily}
+                className="inline-flex h-10 items-center justify-center rounded-lg bg-gradient-to-r from-[#c9a227] to-[#d4af37] px-5 text-sm font-semibold text-[#060912] shadow-[0_0_24px_-8px_rgba(212,175,55,0.7)] transition hover:brightness-110"
+              >
+                Begin Daily Forge
+              </button>
             </div>
           </div>
         </div>

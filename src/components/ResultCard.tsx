@@ -11,6 +11,8 @@ export function ResultCard({
   note,
   onPlayAgain,
   onChooseDrill,
+  playAgainLabel = "Play Again",
+  chooseDrillLabel = "Choose Drill",
 }: {
   label: string;
   score: number;
@@ -19,6 +21,8 @@ export function ResultCard({
   note: string;
   onPlayAgain: () => void;
   onChooseDrill: () => void;
+  playAgainLabel?: string;
+  chooseDrillLabel?: string;
 }) {
   return (
     <div className="mx-auto mt-8 max-w-md">
@@ -44,14 +48,14 @@ export function ResultCard({
             onClick={onPlayAgain}
             className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-gradient-to-r from-[#c9a227] to-[#d4af37] px-6 text-sm font-semibold text-[#060912] transition hover:brightness-110"
           >
-            Play Again
+            {playAgainLabel}
           </button>
           <button
             type="button"
             onClick={onChooseDrill}
             className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/10 px-6 text-sm font-semibold text-[#d4af37] transition hover:bg-[#d4af37]/20"
           >
-            Choose Drill
+            {chooseDrillLabel}
           </button>
         </div>
       </div>

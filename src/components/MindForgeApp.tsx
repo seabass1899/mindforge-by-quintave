@@ -12,7 +12,7 @@ import { ResultCard } from "@/components/ResultCard";
 import { SelectionPanel } from "@/components/SelectionPanel";
 import { TimerBar } from "@/components/TimerBar";
 import { WorkoutCards } from "@/components/WorkoutCards";
-import { type DrillId } from "@/lib/drills";
+import { type DrillId, type PlayableDrillId } from "@/lib/drills";
 import { delay } from "@/lib/game-utils";
 import {
   RM_FLASH_MS,
@@ -53,8 +53,27 @@ import {
   type CsStats,
 } from "@/lib/cognitive-switch";
 
+type WorkoutMode = "single" | "daily";
+
+type DailyScores = {
+  memory?: number;
+  focus?: number;
+  flexibility?: number;
+};
+
+const dailyDrillOrder: PlayableDrillId[] = ["recall-matrix", "signal-lock", "cognitive-switch"];
+
+const domainLabels: Record<keyof DailyScores, string> = {
+  memory: "Memory",
+  focus: "Focus",
+  flexibility: "Flexibility",
+};
+
 export function MindForgeApp() {
   const [selectedDrill, setSelectedDrill] = useState<DrillId>("select");
+  const [workoutMode, setWorkoutMode] = useState<WorkoutMode>("single");
+  const [dailyStepIndex, setDailyStepIndex] = useState(0);
+  const [dailyScores, setDailyScores] = useState<DailyScores>({});
   const drillRef = useRef<HTMLElement>(null);
 
   const scrollToDrill = useCallback(() => {
@@ -417,18 +436,57 @@ export function MindForgeApp() {
       ? Math.round(csStats.responseTimes.reduce((a, b) => a + b, 0) / csStats.responseTimes.length)
       : 0;
 
-  const startDrill = (id: DrillId) => {
+  const startDrill = (id: PlayableDrillId) => {
+    setWorkoutMode("single");
+    setDailyStepIndex(0);
+    setDailyScores({});
     if (id === "recall-matrix") startRecallMatrix();
     if (id === "signal-lock") startSignalLock();
     if (id === "cognitive-switch") startCognitiveSwitch();
   };
 
-  const selectDrill = (id: DrillId) => {
+  const startDailyForge = () => {
+    setWorkoutMode("daily");
+    setDailyStepIndex(0);
+    setDailyScores({});
+    startRecallMatrix();
+  };
+
+  const selectDrill = (id: PlayableDrillId) => {
+    setWorkoutMode("single");
+    setDailyStepIndex(0);
+    setDailyScores({});
     setSelectedDrill(id);
     scrollToDrill();
   };
 
+  const continueDailyForge = () => {
+    if (selectedDrill === "recall-matrix") {
+      setDailyScores((previous) => ({ ...previous, memory: rmStats.finalScore }));
+      setDailyStepIndex(1);
+      startSignalLock();
+      return;
+    }
+
+    if (selectedDrill === "signal-lock") {
+      setDailyScores((previous) => ({ ...previous, focus: slStats.finalScore }));
+      setDailyStepIndex(2);
+      startCognitiveSwitch();
+      return;
+    }
+
+    if (selectedDrill === "cognitive-switch") {
+      setDailyScores((previous) => ({ ...previous, flexibility: csStats.finalScore }));
+      setDailyStepIndex(3);
+      setSelectedDrill("daily-summary");
+      scrollToDrill();
+    }
+  };
+
   const goToSelection = () => {
+    setWorkoutMode("single");
+    setDailyStepIndex(0);
+    setDailyScores({});
     setSelectedDrill("select");
     resetRecallMatrix();
     resetSignalLock();
@@ -441,13 +499,15 @@ export function MindForgeApp() {
         <Header />
         <main className="mt-12 flex flex-1 flex-col sm:mt-16">
           <Hero />
-          <WorkoutCards selectedDrill={selectedDrill} onStart={startDrill} />
+          <WorkoutCards selectedDrill={selectedDrill} onStart={startDrill} onStartDaily={startDailyForge} />
 
           <section ref={drillRef} className="mt-10 scroll-mt-8 sm:mt-12" aria-label="Drill arena">
+            {workoutMode === "daily" && selectedDrill !== "daily-summary" && selectedDrill !== "select" && renderDailyProgress()}
             {selectedDrill === "select" && <SelectionPanel onSelect={selectDrill} />}
             {selectedDrill === "recall-matrix" && renderRecallMatrix()}
             {selectedDrill === "signal-lock" && renderSignalLock()}
             {selectedDrill === "cognitive-switch" && renderCognitiveSwitch()}
+            {selectedDrill === "daily-summary" && renderDailySummary()}
           </section>
         </main>
 
@@ -457,6 +517,136 @@ export function MindForgeApp() {
       </div>
     </AppBackground>
   );
+
+  function renderDailyProgress() {
+    const currentStep = Math.min(dailyStepIndex + 1, dailyDrillOrder.length);
+
+    return (
+      <div className="mb-5 rounded-2xl border border-[#d4af37]/15 bg-[#d4af37]/5 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#d4af37]/80">
+              Daily Forge
+            </p>
+            <h3 className="mt-1 text-base font-semibold text-white">
+              Step {currentStep} of {dailyDrillOrder.length}
+            </h3>
+          </div>
+          <div className="flex gap-2">
+            {dailyDrillOrder.map((drill, index) => {
+              const isComplete = index < dailyStepIndex;
+              const isCurrent = index === dailyStepIndex;
+              return (
+                <span
+                  key={drill}
+                  className={[
+                    "h-2.5 w-10 rounded-full transition",
+                    isComplete
+                      ? "bg-[#d4af37]"
+                      : isCurrent
+                        ? "bg-[#d4af37]/50"
+                        : "bg-white/10",
+                  ].join(" ")}
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderDailySummary() {
+    const memory = dailyScores.memory ?? 0;
+    const focus = dailyScores.focus ?? 0;
+    const flexibility = dailyScores.flexibility ?? 0;
+    const index = Math.round((memory + focus + flexibility) / 3);
+    const entries = [
+      { key: "memory" as const, label: domainLabels.memory, score: memory },
+      { key: "focus" as const, label: domainLabels.focus, score: focus },
+      { key: "flexibility" as const, label: domainLabels.flexibility, score: flexibility },
+    ];
+    const strongest = entries.reduce((best, item) => (item.score > best.score ? item : best), entries[0]);
+    const recommended = entries.reduce((lowest, item) => (item.score < lowest.score ? item : lowest), entries[0]);
+
+    return (
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#0f1629]/95 to-[#080c16]/95 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)]">
+        <div className="border-b border-white/[0.06] px-6 py-5 sm:px-8">
+          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#d4af37]/80">
+            Daily Forge complete
+          </p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-white sm:text-2xl">
+            Cognitive Performance Summary
+          </h2>
+          <p className="mt-2 text-sm text-zinc-500">
+            Your combined score across memory, focus, and flexibility.
+          </p>
+        </div>
+
+        <div className="px-6 py-8 sm:px-8">
+          <div className="mx-auto max-w-2xl rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/5 p-6 text-center">
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#d4af37]/80">
+              Cognitive Performance Index
+            </p>
+            <p className="mt-2 text-5xl font-semibold tracking-tight text-white">
+              {index.toLocaleString()}
+            </p>
+            <p className="mt-2 text-sm text-zinc-400">
+              v0.1 baseline score
+            </p>
+
+            <div className="mt-7 grid gap-3 text-left sm:grid-cols-3">
+              {entries.map((item) => (
+                <div
+                  key={item.key}
+                  className="rounded-lg border border-white/[0.06] bg-[#0a0f1c]/60 px-4 py-4"
+                >
+                  <p className="text-[10px] uppercase tracking-wider text-zinc-500">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 font-mono text-2xl text-white">
+                    {item.score.toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 grid gap-3 text-left sm:grid-cols-2">
+              <div className="rounded-lg border border-white/[0.06] bg-[#0a0f1c]/60 px-4 py-4">
+                <p className="text-[10px] uppercase tracking-wider text-zinc-500">Primary strength</p>
+                <p className="mt-1 text-lg font-semibold text-white">{strongest.label}</p>
+              </div>
+              <div className="rounded-lg border border-white/[0.06] bg-[#0a0f1c]/60 px-4 py-4">
+                <p className="text-[10px] uppercase tracking-wider text-zinc-500">Recommended focus</p>
+                <p className="mt-1 text-lg font-semibold text-white">{recommended.label}</p>
+              </div>
+            </div>
+
+            <p className="mt-5 text-xs leading-relaxed text-zinc-500">
+              This prototype index averages the three live MindForge domains. Later versions will normalize scores against your personal baseline.
+            </p>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={startDailyForge}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg bg-gradient-to-r from-[#c9a227] to-[#d4af37] px-6 text-sm font-semibold text-[#060912] transition hover:brightness-110"
+              >
+                Run Daily Forge Again
+              </button>
+              <button
+                type="button"
+                onClick={goToSelection}
+                className="inline-flex h-11 flex-1 items-center justify-center rounded-lg border border-[#d4af37]/30 bg-[#d4af37]/10 px-6 text-sm font-semibold text-[#d4af37] transition hover:bg-[#d4af37]/20"
+              >
+                Choose Drill
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   function renderRecallMatrix() {
     return (
@@ -540,7 +730,8 @@ export function MindForgeApp() {
             ]}
             note="Score weights level progression, correct taps, accuracy, and sequence depth."
             onPlayAgain={startRecallMatrix}
-            onChooseDrill={goToSelection}
+            onChooseDrill={workoutMode === "daily" ? continueDailyForge : goToSelection}
+            chooseDrillLabel={workoutMode === "daily" ? "Continue Workout" : "Choose Drill"}
           />
         )}
       </DrillShell>
@@ -631,7 +822,8 @@ export function MindForgeApp() {
                 ]}
                 note="Score weights hits, click accuracy, completion rate, response speed, and penalizes mistakes and misses."
                 onPlayAgain={startSignalLock}
-                onChooseDrill={goToSelection}
+                onChooseDrill={workoutMode === "daily" ? continueDailyForge : goToSelection}
+                chooseDrillLabel={workoutMode === "daily" ? "Continue Workout" : "Choose Drill"}
               />
             )}
           </div>
@@ -730,7 +922,8 @@ export function MindForgeApp() {
                 ]}
                 note="Score rewards accuracy, speed, correct answers, and performance immediately after rule changes."
                 onPlayAgain={startCognitiveSwitch}
-                onChooseDrill={goToSelection}
+                onChooseDrill={workoutMode === "daily" ? continueDailyForge : goToSelection}
+                chooseDrillLabel={workoutMode === "daily" ? "Finish Workout" : "Choose Drill"}
               />
             )}
           </div>

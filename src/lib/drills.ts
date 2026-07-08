@@ -1,7 +1,8 @@
-export type DrillId = "select" | "recall-matrix" | "signal-lock" | "cognitive-switch";
+export type DrillId = "select" | "daily-summary" | "recall-matrix" | "signal-lock" | "cognitive-switch";
+export type PlayableDrillId = Exclude<DrillId, "select" | "daily-summary">;
 
 export type DrillCatalogItem = {
-  id: Exclude<DrillId, "select">;
+  id: PlayableDrillId;
   name: string;
   category: string;
   description: string;
