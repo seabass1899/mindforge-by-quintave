@@ -55,6 +55,7 @@ import {
   slGenerateRound,
   slInitialStats,
   slPhaseLabel,
+  slTargetRuleLabel,
   type SlPhase,
   type SlRound,
   type SlStats,
@@ -270,7 +271,7 @@ export function MindForgeApp() {
   const [slRoundId, setSlRoundId] = useState(0);
   const [slTimeLeft, setSlTimeLeft] = useState(SL_DURATION_SEC);
   const [slFlashCell, setSlFlashCell] = useState<number | null>(null);
-  const [slFlashType, setSlFlashType] = useState<"hit" | "miss" | null>(null);
+  const [slFlashType, setSlFlashType] = useState<"hit" | "miss" | "decoy" | null>(null);
   const [slStats, setSlStats] = useState<SlStats>(() => slInitialStats());
   const slRoundStartRef = useRef(0);
   const slEndedRef = useRef(false);
@@ -278,7 +279,7 @@ export function MindForgeApp() {
   const resetSignalLock = useCallback(() => {
     slEndedRef.current = false;
     setSlPhase("intro");
-    setSlRound(slGenerateRound());
+    setSlRound(slGenerateRound(1));
     setSlRoundId(0);
     setSlTimeLeft(SL_DURATION_SEC);
     setSlFlashCell(null);
@@ -297,14 +298,17 @@ export function MindForgeApp() {
 
   const slNextRound = useCallback(() => {
     if (slEndedRef.current) return;
-    setSlRound(slGenerateRound());
-    setSlRoundId((value) => value + 1);
+    setSlRoundId((value) => {
+      const nextRoundId = value + 1;
+      setSlRound(slGenerateRound(nextRoundId));
+      return nextRoundId;
+    });
     slRoundStartRef.current = Date.now();
   }, []);
 
   const startSignalLock = useCallback(() => {
     slEndedRef.current = false;
-    setSlRound(slGenerateRound());
+    setSlRound(slGenerateRound(1));
     setSlRoundId(1);
     setSlTimeLeft(SL_DURATION_SEC);
     setSlFlashCell(null);
@@ -368,9 +372,14 @@ export function MindForgeApp() {
       return;
     }
 
+    const role = slCellRole(cellIndex, slRound);
     setSlFlashCell(cellIndex);
-    setSlFlashType("miss");
-    setSlStats((previous) => ({ ...previous, mistakes: previous.mistakes + 1 }));
+    setSlFlashType(role === "decoy" ? "decoy" : "miss");
+    setSlStats((previous) => ({
+      ...previous,
+      mistakes: previous.mistakes + (role === "decoy" ? 0 : 1),
+      decoyErrors: previous.decoyErrors + (role === "decoy" ? 1 : 0),
+    }));
     window.setTimeout(() => {
       setSlFlashCell(null);
       setSlFlashType(null);
@@ -383,8 +392,8 @@ export function MindForgeApp() {
       : 0;
 
   const slAccuracy =
-    slStats.hits + slStats.mistakes > 0
-      ? Math.round((slStats.hits / (slStats.hits + slStats.mistakes)) * 100)
+    slStats.hits + slStats.mistakes + slStats.decoyErrors > 0
+      ? Math.round((slStats.hits / (slStats.hits + slStats.mistakes + slStats.decoyErrors)) * 100)
       : 100;
 
   // Cognitive Switch state
@@ -846,13 +855,13 @@ export function MindForgeApp() {
         drillNumber="02"
         category="Focus"
         title="Signal Lock"
-        description="Lock onto the gold signal. Ignore blue-gray distractors. Speed and accuracy both matter."
+        description="Lock onto the correct signal while suppressing decoys, interference, and visual noise."
         status={slPhaseLabel(slPhase)}
         onBack={goToSelection}
       >
         {slPhase === "intro" && (
           <IntroCard
-            text="You have 30 seconds. Tap the gold target on each round and avoid distractors. Slow rounds count as misses."
+            text="You have 30 seconds. Tap only the solid gold signal. Later rounds add hollow gold decoys and red interference pulses. Slow rounds count as misses."
             buttonText="Start Signal Lock"
             onStart={startSignalLock}
           />
@@ -863,11 +872,16 @@ export function MindForgeApp() {
             {slPhase === "playing" && (
               <>
                 <TimerBar label="Time remaining" value={`${slTimeLeft}s`} />
+                <div className="mb-5 rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/5 px-5 py-4 text-center">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-[#d4af37]/80">Active target rule</p>
+                  <p className="mt-1 font-mono text-lg font-semibold text-[#f0d78c]">{slTargetRuleLabel(slRoundId)}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-zinc-500">Solid gold is the only valid target. Hollow gold and red signals are traps.</p>
+                </div>
                 <MetricGrid
                   metrics={[
                     { label: "Hits", value: slStats.hits },
                     { label: "Misses", value: slStats.misses },
-                    { label: "Mistakes", value: slStats.mistakes },
+                    { label: "Decoys", value: slStats.decoyErrors },
                     { label: "Accuracy", value: `${slAccuracy}%` },
                   ]}
                 />
@@ -882,29 +896,56 @@ export function MindForgeApp() {
                         key={index}
                         type="button"
                         onClick={() => slHandleCellClick(index)}
-                        aria-label={role === "target" ? "Target signal" : role === "distractor" ? "Distractor" : "Neutral cell"}
+                        aria-label={
+                          role === "target"
+                            ? "Solid gold target signal"
+                            : role === "decoy"
+                              ? "Hollow gold decoy"
+                              : role === "interference"
+                                ? "Red interference signal"
+                                : role === "distractor"
+                                  ? "Blue distractor"
+                                  : "Neutral cell"
+                        }
                         className={[
                           "relative aspect-square rounded-lg border transition-all duration-150",
                           "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]",
                           "cursor-pointer",
                           isFlash && slFlashType === "hit"
                             ? "scale-105 border-[#d4af37] bg-[#d4af37]/40 shadow-[0_0_28px_-2px_rgba(212,175,55,0.7)]"
-                            : isFlash && slFlashType === "miss"
-                              ? "border-red-400/60 bg-red-500/20"
-                              : role === "target"
-                                ? "border-[#d4af37]/60 bg-[#d4af37]/15 shadow-[0_0_20px_-6px_rgba(212,175,55,0.5)]"
-                                : role === "distractor"
-                                  ? "border-[#3b5f8a]/40 bg-[#1a2a42]/80"
-                                  : "border-white/[0.06] bg-[#0a0f1c]",
+                            : isFlash && slFlashType === "decoy"
+                              ? "border-[#d4af37]/70 bg-[#d4af37]/10 shadow-[0_0_18px_-4px_rgba(212,175,55,0.45)]"
+                              : isFlash && slFlashType === "miss"
+                                ? "border-red-400/60 bg-red-500/20"
+                                : role === "target"
+                                  ? "border-[#d4af37]/60 bg-[#d4af37]/15 shadow-[0_0_20px_-6px_rgba(212,175,55,0.5)]"
+                                  : role === "decoy"
+                                    ? "border-[#d4af37]/35 bg-[#d4af37]/5"
+                                    : role === "interference"
+                                      ? "border-red-400/35 bg-red-500/10"
+                                      : role === "distractor"
+                                        ? "border-[#3b5f8a]/40 bg-[#1a2a42]/80"
+                                        : "border-white/[0.06] bg-[#0a0f1c]",
                         ].join(" ")}
                       >
                         {role === "target" && !isFlash && (
                           <span className="absolute inset-0 m-auto h-2.5 w-2.5 rounded-full bg-[#d4af37] shadow-[0_0_10px_rgba(212,175,55,0.8)]" />
                         )}
+                        {role === "decoy" && !isFlash && (
+                          <span className="absolute inset-0 m-auto h-3 w-3 rounded-full border-2 border-[#d4af37]/70 bg-transparent" />
+                        )}
+                        {role === "interference" && !isFlash && (
+                          <span className="absolute inset-0 m-auto h-2.5 w-2.5 rounded-sm bg-red-400/70 rotate-45" />
+                        )}
                         {role === "distractor" && <span className="absolute inset-0 m-auto h-2 w-2 rounded-full bg-[#4a6a8a]/60" />}
                       </button>
                     );
                   })}
+                </div>
+                <div className="mt-4 grid gap-2 text-xs text-zinc-500 sm:grid-cols-3">
+                  <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-[#d4af37]" /> Solid gold target</div>
+                  <div className="flex items-center gap-2"><span className="h-3 w-3 rounded-full border border-[#d4af37]/70" /> Hollow decoy</div>
+                  <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rotate-45 rounded-sm bg-red-400/70" /> Interference</div>
                 </div>
               </>
             )}
@@ -917,12 +958,13 @@ export function MindForgeApp() {
                 metrics={[
                   { label: "Hits", value: slStats.hits },
                   { label: "Misses", value: slStats.misses },
-                  { label: "Mistakes", value: slStats.mistakes },
+                  { label: "Errors", value: slStats.mistakes },
+                  { label: "Decoy traps", value: slStats.decoyErrors },
                   { label: "Accuracy", value: `${slAccuracy}%` },
                   { label: "Avg response", value: slAvgResponseMs > 0 ? `${slAvgResponseMs}ms` : "—" },
                   { label: "Total rounds", value: slStats.hits + slStats.misses },
                 ]}
-                note="Score weights hits, click accuracy, completion rate, response speed, and penalizes mistakes and misses."
+                note="Score rewards fast target acquisition and inhibition accuracy, while penalizing decoy traps, interference errors, and missed rounds."
                 onPlayAgain={startSignalLock}
                 onChooseDrill={workoutMode === "daily" ? continueDailyForge : goToSelection}
                 chooseDrillLabel={workoutMode === "daily" ? "Continue Workout" : "Choose Drill"}
