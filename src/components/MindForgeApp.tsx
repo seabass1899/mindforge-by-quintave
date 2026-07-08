@@ -32,10 +32,17 @@ import {
   RM_GRID_SIZE,
   RM_INITIAL_LENGTH,
   RM_PRE_MS,
+  RM_NOISE_MS,
   rmCalculateScore,
+  rmExpectedSequence,
+  rmGenerateNoiseCells,
   rmGenerateSequence,
   rmInitialStats,
+  rmModeForLevel,
+  rmModeInstruction,
+  rmModeLabel,
   rmPhaseLabel,
+  type RmMode,
   type RmPhase,
   type RmStats,
 } from "@/lib/recall-matrix";
@@ -104,29 +111,44 @@ export function MindForgeApp() {
   const [rmSequence, setRmSequence] = useState<number[]>([]);
   const [rmUserInput, setRmUserInput] = useState<number[]>([]);
   const [rmActiveCell, setRmActiveCell] = useState<number | null>(null);
+  const [rmNoiseCells, setRmNoiseCells] = useState<number[]>([]);
   const [rmConfirmedCells, setRmConfirmedCells] = useState<number[]>([]);
   const [rmRound, setRmRound] = useState(0);
+  const [rmMode, setRmMode] = useState<RmMode>(() => rmModeForLevel(1));
   const [rmStats, setRmStats] = useState<RmStats>(() => rmInitialStats());
   const rmAbortRef = useRef<AbortController | null>(null);
+  const rmInputRef = useRef<number[]>([]);
+  const rmAnswerSequenceRef = useRef<number[]>([]);
+  const rmInputLockedRef = useRef(false);
 
   const resetRecallMatrix = useCallback(() => {
     rmAbortRef.current?.abort();
     setRmPhase("intro");
     setRmSequence([]);
+    rmInputRef.current = [];
+    rmAnswerSequenceRef.current = [];
+    rmInputLockedRef.current = false;
     setRmUserInput([]);
     setRmActiveCell(null);
+    setRmNoiseCells([]);
     setRmConfirmedCells([]);
     setRmRound(0);
+    setRmMode(rmModeForLevel(1));
     setRmStats(rmInitialStats());
   }, []);
 
   const startRecallMatrix = useCallback(() => {
     rmAbortRef.current?.abort();
     setRmSequence(rmGenerateSequence(RM_INITIAL_LENGTH));
+    rmInputRef.current = [];
+    rmAnswerSequenceRef.current = [];
+    rmInputLockedRef.current = false;
     setRmUserInput([]);
     setRmActiveCell(null);
+    setRmNoiseCells([]);
     setRmConfirmedCells([]);
     setRmRound(1);
+    setRmMode(rmModeForLevel(1));
     setRmStats(rmInitialStats());
     setRmPhase("showing");
     setSelectedDrill("recall-matrix");
@@ -134,23 +156,35 @@ export function MindForgeApp() {
   }, [scrollToDrill]);
 
   const rmAdvanceLevel = useCallback((current: RmStats) => {
+    const nextLevel = current.level + 1;
     const nextLength = current.sequenceLength + 1;
+    const nextMode = rmModeForLevel(nextLevel);
     setRmStats({
       ...current,
-      level: current.level + 1,
+      level: nextLevel,
       sequenceLength: nextLength,
+      cleanRounds: current.cleanRounds + 1,
+      reverseRounds: current.reverseRounds + (rmMode === "reverse" ? 1 : 0),
+      interferenceRounds: current.interferenceRounds + (rmMode === "interference" ? 1 : 0),
     });
     setRmSequence(rmGenerateSequence(nextLength));
+    rmInputRef.current = [];
+    rmAnswerSequenceRef.current = [];
+    rmInputLockedRef.current = false;
     setRmUserInput([]);
+    setRmNoiseCells([]);
     setRmConfirmedCells([]);
+    setRmMode(nextMode);
     setRmRound((value) => value + 1);
     setRmPhase("showing");
-  }, []);
+  }, [rmMode]);
 
   const rmEndGame = useCallback((current: RmStats) => {
+    rmInputLockedRef.current = true;
     setRmStats({ ...current, finalScore: rmCalculateScore(current) });
     setRmPhase("result");
     setRmActiveCell(null);
+    setRmNoiseCells([]);
     setRmConfirmedCells([]);
   }, []);
 
@@ -163,12 +197,21 @@ export function MindForgeApp() {
       try {
         setRmActiveCell(null);
         await delay(RM_PRE_MS, controller.signal);
+        if (rmMode === "interference") {
+          setRmNoiseCells(rmGenerateNoiseCells(rmSequence));
+          await delay(RM_NOISE_MS, controller.signal);
+          setRmNoiseCells([]);
+          await delay(RM_GAP_MS, controller.signal);
+        }
         for (const cell of rmSequence) {
           setRmActiveCell(cell);
           await delay(RM_FLASH_MS, controller.signal);
           setRmActiveCell(null);
           await delay(RM_GAP_MS, controller.signal);
         }
+        rmInputRef.current = [];
+        rmAnswerSequenceRef.current = rmExpectedSequence(rmSequence, rmMode);
+        rmInputLockedRef.current = false;
         setRmPhase("input");
         setRmUserInput([]);
         setRmConfirmedCells([]);
@@ -179,20 +222,29 @@ export function MindForgeApp() {
 
     void run();
     return () => controller.abort();
-  }, [rmPhase, rmRound, rmSequence]);
+  }, [rmMode, rmPhase, rmRound, rmSequence]);
 
   const rmHandleCellClick = (cellIndex: number) => {
-    if (rmPhase !== "input") return;
+    if (rmPhase !== "input" || rmInputLockedRef.current) return;
 
-    const step = rmUserInput.length;
-    if (cellIndex !== rmSequence[step]) {
+    const expectedSequence =
+      rmAnswerSequenceRef.current.length > 0
+        ? rmAnswerSequenceRef.current
+        : rmExpectedSequence(rmSequence, rmMode);
+    const currentInput = rmInputRef.current;
+    const step = currentInput.length;
+
+    if (cellIndex !== expectedSequence[step]) {
+      rmInputLockedRef.current = true;
       const failed = { ...rmStats, mistakes: rmStats.mistakes + 1 };
       setRmActiveCell(cellIndex);
       window.setTimeout(() => rmEndGame(failed), 320);
       return;
     }
 
-    const nextInput = [...rmUserInput, cellIndex];
+    const nextInput = [...currentInput, cellIndex];
+    rmInputRef.current = nextInput;
+
     const updated = { ...rmStats, correctTaps: rmStats.correctTaps + 1 };
 
     setRmUserInput(nextInput);
@@ -201,7 +253,8 @@ export function MindForgeApp() {
     setRmStats(updated);
     window.setTimeout(() => setRmActiveCell(null), 180);
 
-    if (nextInput.length === rmSequence.length) {
+    if (nextInput.length === expectedSequence.length) {
+      rmInputLockedRef.current = true;
       window.setTimeout(() => rmAdvanceLevel(updated), 420);
     }
   };
@@ -694,7 +747,7 @@ export function MindForgeApp() {
       >
         {rmPhase === "intro" && (
           <IntroCard
-            text="Sequences begin at length 3. One wrong cell ends the run."
+            text="Sequences begin at length 3. Advanced rounds add reverse recall and noise-filter challenges. One wrong cell ends the run."
             buttonText="Start Recall Matrix"
             onStart={startRecallMatrix}
           />
@@ -711,11 +764,18 @@ export function MindForgeApp() {
               ]}
             />
 
+            <div className="mb-5 rounded-xl border border-[#d4af37]/15 bg-[#d4af37]/5 px-4 py-3 text-center">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-[#d4af37]/75">Recall mode</p>
+              <p className="mt-1 font-mono text-lg font-semibold text-[#f0d78c]">{rmModeLabel(rmMode)}</p>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-500">{rmModeInstruction(rmMode)}</p>
+            </div>
+
             <div className="grid grid-cols-3 gap-2.5 sm:gap-3" role="grid" aria-label="3 by 3 recall matrix">
               {Array.from({ length: RM_GRID_SIZE }, (_, index) => {
                 const isFlashing = rmActiveCell === index;
                 const isConfirmed = rmConfirmedCells.includes(index);
                 const isWrongFlash = rmPhase === "result" && rmActiveCell === index && rmStats.mistakes > 0;
+                const isNoise = rmNoiseCells.includes(index);
 
                 return (
                   <button
@@ -730,7 +790,9 @@ export function MindForgeApp() {
                       rmPhase === "input" ? "cursor-pointer hover:border-[#d4af37]/40" : "cursor-default",
                       isWrongFlash
                         ? "border-red-400/70 bg-red-500/25 shadow-[0_0_28px_-4px_rgba(239,68,68,0.55)]"
-                        : isFlashing
+                        : isNoise
+                          ? "border-[#4a6a8a]/80 bg-[#1e3a5f]/45 shadow-[0_0_24px_-6px_rgba(74,106,138,0.65)]"
+                          : isFlashing
                           ? "scale-[1.03] border-[#d4af37] bg-[#d4af37]/30 shadow-[0_0_32px_-4px_rgba(212,175,55,0.65)]"
                           : isConfirmed
                             ? "border-[#d4af37]/35 bg-[#d4af37]/10"
@@ -741,11 +803,15 @@ export function MindForgeApp() {
               })}
             </div>
 
-            {rmPhase === "showing" && <p className="mt-5 text-center text-sm text-zinc-500">Memorize the pattern...</p>}
+            {rmPhase === "showing" && (
+              <p className="mt-5 text-center text-sm text-zinc-500">
+                {rmMode === "interference" ? "Ignore blue noise. Memorize only the gold sequence." : "Memorize the pattern."}
+              </p>
+            )}
             {rmPhase === "input" && (
               <p className="mt-5 text-center text-sm text-zinc-500">
                 Tap <span className="font-mono text-[#d4af37]">{rmUserInput.length + 1}</span> of{" "}
-                <span className="font-mono text-[#d4af37]">{rmSequence.length}</span>
+                <span className="font-mono text-[#d4af37]">{rmSequence.length}</span> · {rmModeInstruction(rmMode)}
               </p>
             )}
           </div>
@@ -761,8 +827,10 @@ export function MindForgeApp() {
               { label: "Max sequence", value: rmStats.sequenceLength },
               { label: "Accuracy", value: `${rmAccuracy}%` },
               { label: "Correct taps", value: rmStats.correctTaps },
+              { label: "Clean rounds", value: rmStats.cleanRounds },
+              { label: "Challenge rounds", value: rmStats.reverseRounds + rmStats.interferenceRounds },
             ]}
-            note="Score weights level progression, correct taps, accuracy, and sequence depth."
+            note="Score weights level progression, correct taps, accuracy, clean clears, reverse recall, and noise-filter rounds."
             onPlayAgain={startRecallMatrix}
             onChooseDrill={workoutMode === "daily" ? continueDailyForge : goToSelection}
             chooseDrillLabel={workoutMode === "daily" ? "Continue Workout" : "Choose Drill"}

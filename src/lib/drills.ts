@@ -15,8 +15,8 @@ export const drillCatalog: DrillCatalogItem[] = [
     id: "recall-matrix",
     name: "Recall Matrix",
     category: "Memory",
-    description: "Reconstruct spatial patterns from memory under time pressure.",
-    duration: "4 min",
+    description: "Reconstruct spatial patterns with forward, reverse, and noise-filter recall.",
+    duration: "4–5 min",
     available: true,
   },
   {
