@@ -530,7 +530,6 @@ export function MindForgeApp() {
         <main className="mt-12 flex flex-1 flex-col sm:mt-16">
           <Hero />
           <WorkoutCards selectedDrill={selectedDrill} onStart={startDrill} onStartDaily={startDailyForge} />
-          <ProgressPanel sessions={sessionHistory} onClear={clearProgressHistory} />
 
           <section ref={drillRef} className="mt-10 scroll-mt-8 sm:mt-12" aria-label="Drill arena">
             {workoutMode === "daily" && selectedDrill !== "daily-summary" && selectedDrill !== "select" && renderDailyProgress()}
@@ -540,6 +539,8 @@ export function MindForgeApp() {
             {selectedDrill === "cognitive-switch" && renderCognitiveSwitch()}
             {selectedDrill === "daily-summary" && renderDailySummary()}
           </section>
+
+          <ProgressPanel sessions={sessionHistory} onClear={clearProgressHistory} />
         </main>
 
         <footer className="mt-16 border-t border-white/[0.05] pt-8 text-center text-xs text-zinc-600 sm:mt-20">
