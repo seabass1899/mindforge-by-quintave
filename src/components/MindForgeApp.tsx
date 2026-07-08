@@ -8,11 +8,23 @@ import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
 import { IntroCard } from "@/components/IntroCard";
 import { MetricGrid } from "@/components/MetricGrid";
+import { ProgressPanel } from "@/components/ProgressPanel";
 import { ResultCard } from "@/components/ResultCard";
 import { SelectionPanel } from "@/components/SelectionPanel";
 import { TimerBar } from "@/components/TimerBar";
 import { WorkoutCards } from "@/components/WorkoutCards";
 import { type DrillId, type PlayableDrillId } from "@/lib/drills";
+import {
+  calculateCpi,
+  clearDailySessions,
+  createDailySession,
+  getPrimaryStrength,
+  getRecommendedFocus,
+  readDailySessions,
+  saveDailySession,
+  type DailyScoresComplete,
+  type DailySession,
+} from "@/lib/progress";
 import { delay } from "@/lib/game-utils";
 import {
   RM_FLASH_MS,
@@ -74,7 +86,12 @@ export function MindForgeApp() {
   const [workoutMode, setWorkoutMode] = useState<WorkoutMode>("single");
   const [dailyStepIndex, setDailyStepIndex] = useState(0);
   const [dailyScores, setDailyScores] = useState<DailyScores>({});
+  const [sessionHistory, setSessionHistory] = useState<DailySession[]>([]);
   const drillRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    setSessionHistory(readDailySessions());
+  }, []);
 
   const scrollToDrill = useCallback(() => {
     window.setTimeout(() => {
@@ -476,11 +493,24 @@ export function MindForgeApp() {
     }
 
     if (selectedDrill === "cognitive-switch") {
-      setDailyScores((previous) => ({ ...previous, flexibility: csStats.finalScore }));
+      const completedScores: DailyScoresComplete = {
+        memory: dailyScores.memory ?? 0,
+        focus: dailyScores.focus ?? 0,
+        flexibility: csStats.finalScore,
+      };
+      const savedSession = createDailySession(completedScores);
+
+      setDailyScores(completedScores);
+      setSessionHistory(saveDailySession(savedSession));
       setDailyStepIndex(3);
       setSelectedDrill("daily-summary");
       scrollToDrill();
     }
+  };
+
+  const clearProgressHistory = () => {
+    clearDailySessions();
+    setSessionHistory([]);
   };
 
   const goToSelection = () => {
@@ -500,6 +530,7 @@ export function MindForgeApp() {
         <main className="mt-12 flex flex-1 flex-col sm:mt-16">
           <Hero />
           <WorkoutCards selectedDrill={selectedDrill} onStart={startDrill} onStartDaily={startDailyForge} />
+          <ProgressPanel sessions={sessionHistory} onClear={clearProgressHistory} />
 
           <section ref={drillRef} className="mt-10 scroll-mt-8 sm:mt-12" aria-label="Drill arena">
             {workoutMode === "daily" && selectedDrill !== "daily-summary" && selectedDrill !== "select" && renderDailyProgress()}
@@ -557,17 +588,19 @@ export function MindForgeApp() {
   }
 
   function renderDailySummary() {
-    const memory = dailyScores.memory ?? 0;
-    const focus = dailyScores.focus ?? 0;
-    const flexibility = dailyScores.flexibility ?? 0;
-    const index = Math.round((memory + focus + flexibility) / 3);
+    const completedScores: DailyScoresComplete = {
+      memory: dailyScores.memory ?? 0,
+      focus: dailyScores.focus ?? 0,
+      flexibility: dailyScores.flexibility ?? 0,
+    };
+    const index = calculateCpi(completedScores);
     const entries = [
-      { key: "memory" as const, label: domainLabels.memory, score: memory },
-      { key: "focus" as const, label: domainLabels.focus, score: focus },
-      { key: "flexibility" as const, label: domainLabels.flexibility, score: flexibility },
+      { key: "memory" as const, label: domainLabels.memory, score: completedScores.memory },
+      { key: "focus" as const, label: domainLabels.focus, score: completedScores.focus },
+      { key: "flexibility" as const, label: domainLabels.flexibility, score: completedScores.flexibility },
     ];
-    const strongest = entries.reduce((best, item) => (item.score > best.score ? item : best), entries[0]);
-    const recommended = entries.reduce((lowest, item) => (item.score < lowest.score ? item : lowest), entries[0]);
+    const strongest = getPrimaryStrength(completedScores);
+    const recommended = getRecommendedFocus(completedScores);
 
     return (
       <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#0f1629]/95 to-[#080c16]/95 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.55)]">
@@ -614,16 +647,16 @@ export function MindForgeApp() {
             <div className="mt-5 grid gap-3 text-left sm:grid-cols-2">
               <div className="rounded-lg border border-white/[0.06] bg-[#0a0f1c]/60 px-4 py-4">
                 <p className="text-[10px] uppercase tracking-wider text-zinc-500">Primary strength</p>
-                <p className="mt-1 text-lg font-semibold text-white">{strongest.label}</p>
+                <p className="mt-1 text-lg font-semibold text-white">{strongest}</p>
               </div>
               <div className="rounded-lg border border-white/[0.06] bg-[#0a0f1c]/60 px-4 py-4">
                 <p className="text-[10px] uppercase tracking-wider text-zinc-500">Recommended focus</p>
-                <p className="mt-1 text-lg font-semibold text-white">{recommended.label}</p>
+                <p className="mt-1 text-lg font-semibold text-white">{recommended}</p>
               </div>
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-zinc-500">
-              This prototype index averages the three live MindForge domains. Later versions will normalize scores against your personal baseline.
+              This prototype index averages the three live MindForge domains and saves this Daily Forge result locally in your browser.
             </p>
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
