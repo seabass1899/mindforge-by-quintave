@@ -1,0 +1,64 @@
+import { drillCatalog, type DrillId } from "@/lib/drills";
+
+export function WorkoutCards({
+  selectedDrill,
+  onStart,
+}: {
+  selectedDrill: DrillId;
+  onStart: (id: DrillId) => void;
+}) {
+  return (
+    <section className="mt-10 sm:mt-14">
+      <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#0f1629]/90 to-[#0a0f1c]/90 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.6)] backdrop-blur-sm">
+        <div className="border-b border-white/[0.06] px-6 py-5 sm:px-8">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#d4af37]/80">
+                Daily protocol
+              </p>
+              <h2 className="mt-1 text-xl font-semibold tracking-tight text-white sm:text-2xl">
+                Today&apos;s Cognitive Workout
+              </h2>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-zinc-500">
+              <span className="font-mono text-[#d4af37]">3</span>
+              <span>drills live</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-px bg-white/[0.04] sm:grid-cols-3">
+          {drillCatalog.map((drill, index) => (
+            <article
+              key={drill.id}
+              className={`flex flex-col px-6 py-6 sm:px-7 sm:py-7 ${
+                selectedDrill === drill.id
+                  ? "bg-[#0d1424] ring-1 ring-inset ring-[#d4af37]/20"
+                  : "bg-[#0a0f1c]"
+              }`}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <span className="font-mono text-xs text-zinc-600">0{index + 1}</span>
+                <span className="rounded-md border border-[#d4af37]/15 bg-[#d4af37]/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-[#d4af37]/90">
+                  {drill.category}
+                </span>
+              </div>
+              <h3 className="text-lg font-semibold tracking-tight text-white">{drill.name}</h3>
+              <p className="mt-2 flex-1 text-sm leading-relaxed text-zinc-500">{drill.description}</p>
+              <div className="mt-5 flex items-center justify-between border-t border-white/[0.05] pt-4">
+                <span className="text-xs text-zinc-600">{drill.duration}</span>
+                <button
+                  type="button"
+                  onClick={() => onStart(drill.id)}
+                  className="text-xs font-medium text-[#d4af37] transition hover:text-[#f0d78c]"
+                >
+                  Start →
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
