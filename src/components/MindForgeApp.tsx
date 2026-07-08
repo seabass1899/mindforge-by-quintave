@@ -63,11 +63,13 @@ import {
 import {
   CS_DURATION_SEC,
   csCalculateScore,
+  csChoiceErrorType,
   csGenerateRound,
   csInitialStats,
   csPhaseLabel,
   csRuleForRound,
   csRuleLabel,
+  csTrialLabel,
   type CsPhase,
   type CsRound,
   type CsStats,
@@ -399,7 +401,7 @@ export function MindForgeApp() {
   // Cognitive Switch state
   const [csPhase, setCsPhase] = useState<CsPhase>("intro");
   const [csRoundNumber, setCsRoundNumber] = useState(1);
-  const [csRound, setCsRound] = useState<CsRound>(() => csGenerateRound(csRuleForRound(1), false));
+  const [csRound, setCsRound] = useState<CsRound>(() => csGenerateRound(csRuleForRound(1), false, undefined, 1));
   const [csTimeLeft, setCsTimeLeft] = useState(CS_DURATION_SEC);
   const [csFeedbackIndex, setCsFeedbackIndex] = useState<number | null>(null);
   const [csFeedbackType, setCsFeedbackType] = useState<"correct" | "wrong" | null>(null);
@@ -409,7 +411,7 @@ export function MindForgeApp() {
   const csEndedRef = useRef(false);
 
   const resetCognitiveSwitch = useCallback(() => {
-    const firstRound = csGenerateRound(csRuleForRound(1), false);
+    const firstRound = csGenerateRound(csRuleForRound(1), false, undefined, 1);
     csEndedRef.current = false;
     setCsPhase("intro");
     setCsRoundNumber(1);
@@ -432,7 +434,7 @@ export function MindForgeApp() {
   }, []);
 
   const startCognitiveSwitch = useCallback(() => {
-    const firstRound = csGenerateRound(csRuleForRound(1), false);
+    const firstRound = csGenerateRound(csRuleForRound(1), false, undefined, 1);
     csEndedRef.current = false;
     setCsRoundNumber(1);
     setCsRound(firstRound);
@@ -471,11 +473,13 @@ export function MindForgeApp() {
     if (csPhase !== "playing" || csEndedRef.current || csLocked) return;
 
     const isCorrect = choiceIndex === csRound.correctIndex;
+    const errorType = isCorrect ? null : csChoiceErrorType(csRound, choiceIndex);
+    const isPressureTrial = csRound.trialType !== "standard";
     const responseMs = Date.now() - csRoundStartRef.current;
     const nextRoundNumber = csRoundNumber + 1;
     const nextRule = csRuleForRound(nextRoundNumber);
     const isRuleSwitch = nextRule !== csRound.rule;
-    const nextRound = csGenerateRound(nextRule, isRuleSwitch);
+    const nextRound = csGenerateRound(nextRule, isRuleSwitch, csRound.rule, nextRoundNumber);
 
     setCsLocked(true);
     setCsFeedbackIndex(choiceIndex);
@@ -485,9 +489,12 @@ export function MindForgeApp() {
       correct: previous.correct + (isCorrect ? 1 : 0),
       mistakes: previous.mistakes + (isCorrect ? 0 : 1),
       rounds: previous.rounds + 1,
-      ruleSwitches: previous.ruleSwitches + (isRuleSwitch ? 1 : 0),
+      ruleSwitches: previous.ruleSwitches + (csRound.isSwitchRound ? 1 : 0),
       switchAttempts: previous.switchAttempts + (csRound.isSwitchRound ? 1 : 0),
       switchCorrect: previous.switchCorrect + (csRound.isSwitchRound && isCorrect ? 1 : 0),
+      conflictTrials: previous.conflictTrials + (isPressureTrial ? 1 : 0),
+      conflictCorrect: previous.conflictCorrect + (isPressureTrial && isCorrect ? 1 : 0),
+      previousTrapErrors: previous.previousTrapErrors + (errorType === "previous-rule" ? 1 : 0),
       responseTimes: [...previous.responseTimes, responseMs],
     }));
 
@@ -509,6 +516,9 @@ export function MindForgeApp() {
 
   const csSwitchAccuracy =
     csStats.switchAttempts > 0 ? Math.round((csStats.switchCorrect / csStats.switchAttempts) * 100) : 100;
+
+  const csConflictAccuracy =
+    csStats.conflictTrials > 0 ? Math.round((csStats.conflictCorrect / csStats.conflictTrials) * 100) : 100;
 
   const csAvgResponseMs =
     csStats.responseTimes.length > 0
@@ -982,13 +992,13 @@ export function MindForgeApp() {
         drillNumber="03"
         category="Flexibility"
         title="Cognitive Switch"
-        description="Match by the active rule only. The rule changes every three rounds, so suppress the old rule and adapt fast."
+        description="Match by the active rule only. Handle conflict trials, suppress previous-rule traps, and adapt as the switch interval tightens."
         status={csPhaseLabel(csPhase)}
         onBack={goToSelection}
       >
         {csPhase === "intro" && (
           <IntroCard
-            text="You have 45 seconds. Match the reference item by color, shape, or number based only on the active rule."
+            text="You have 45 seconds. Match the reference item by the active rule only. Later rounds add conflict choices and previous-rule traps."
             buttonText="Start Cognitive Switch"
             onStart={startCognitiveSwitch}
           />
@@ -1002,15 +1012,30 @@ export function MindForgeApp() {
                 <div className="mb-5 rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/5 px-5 py-4 text-center">
                   <p className="text-[10px] uppercase tracking-[0.22em] text-[#d4af37]/80">Active rule</p>
                   <p className="mt-1 font-mono text-2xl font-semibold text-[#f0d78c]">{csRuleLabel(csRound.rule)}</p>
-                  {csRound.isSwitchRound && <p className="mt-2 text-xs text-[#d4af37]">Rule switched — adapt.</p>}
+                  <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-[11px] uppercase tracking-[0.16em]">
+                    <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-zinc-400">
+                      {csTrialLabel(csRound.trialType)}
+                    </span>
+                    {csRound.previousRule && (
+                      <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-zinc-500">
+                        Previous: {csRuleLabel(csRound.previousRule)}
+                      </span>
+                    )}
+                    {csRound.choiceCount > 3 && (
+                      <span className="rounded-full border border-[#d4af37]/20 bg-[#d4af37]/10 px-3 py-1 text-[#d4af37]">
+                        Hard set
+                      </span>
+                    )}
+                  </div>
+                  {csRound.isSwitchRound && <p className="mt-3 text-xs text-[#d4af37]">Rule switched — suppress the old rule.</p>}
                 </div>
 
                 <MetricGrid
                   metrics={[
                     { label: "Correct", value: csStats.correct },
                     { label: "Mistakes", value: csStats.mistakes },
-                    { label: "Rounds", value: csStats.rounds },
-                    { label: "Switches", value: csStats.ruleSwitches },
+                    { label: "Pressure", value: csStats.conflictTrials },
+                    { label: "Prev traps", value: csStats.previousTrapErrors },
                   ]}
                 />
 
@@ -1019,10 +1044,12 @@ export function MindForgeApp() {
                   <CognitiveItemDisplay item={csRound.reference} />
                 </div>
 
-                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-4">
                   {csRound.choices.map((choice, index) => {
                     const isSelected = csFeedbackIndex === index;
                     const isCorrect = index === csRound.correctIndex;
+                    const isPreviousTrap = index === csRound.previousTrapIndex;
+                    const isConflictTrap = index === csRound.conflictIndex;
 
                     return (
                       <button
@@ -1044,6 +1071,11 @@ export function MindForgeApp() {
                         ].join(" ")}
                       >
                         <CognitiveItemDisplay item={choice} />
+                        {csLocked && !isCorrect && (isPreviousTrap || isConflictTrap) && (
+                          <p className="mt-2 text-center text-[10px] uppercase tracking-[0.16em] text-zinc-500">
+                            {isPreviousTrap ? "Old-rule trap" : "Conflict lure"}
+                          </p>
+                        )}
                       </button>
                     );
                   })}
@@ -1062,9 +1094,11 @@ export function MindForgeApp() {
                   { label: "Accuracy", value: `${csAccuracy}%` },
                   { label: "Rule switches", value: csStats.ruleSwitches },
                   { label: "Switch accuracy", value: `${csSwitchAccuracy}%` },
+                  { label: "Pressure accuracy", value: `${csConflictAccuracy}%` },
+                  { label: "Prev-rule traps", value: csStats.previousTrapErrors },
                   { label: "Avg response", value: csAvgResponseMs > 0 ? `${csAvgResponseMs}ms` : "—" },
                 ]}
-                note="Score rewards accuracy, speed, correct answers, and performance immediately after rule changes."
+                note="Score rewards active-rule accuracy, post-switch control, conflict-trial performance, speed, and avoiding previous-rule traps."
                 onPlayAgain={startCognitiveSwitch}
                 onChooseDrill={workoutMode === "daily" ? continueDailyForge : goToSelection}
                 chooseDrillLabel={workoutMode === "daily" ? "Finish Workout" : "Choose Drill"}
