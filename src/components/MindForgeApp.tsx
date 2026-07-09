@@ -648,36 +648,69 @@ export function MindForgeApp() {
     return () => window.clearTimeout(timeout);
   }, [vfLocked, vfPhase, vfRound, vfRoundNumber, vfNextRound]);
 
-  const vfHandleAnswer = (direction: VfDirection) => {
+  const vfHandleAnswer = useCallback(
+    (direction: VfDirection) => {
+      if (vfPhase !== "playing" || vfLocked || vfEndedRef.current) return;
+
+      const isCorrect = direction === vfRound.targetDirection;
+      const responseMs = Date.now() - vfRoundStartRef.current;
+      setVfLocked(true);
+      setVfFeedback(isCorrect ? "correct" : "wrong");
+      setVfStats((previous) => {
+        const nextStreak = isCorrect ? previous.currentStreak + 1 : 0;
+        const isConflictTrial = vfRound.trialType === "conflict" || vfRound.trialType === "interference";
+        const isShiftedTrial = vfRound.trialType === "shift";
+        return {
+          ...previous,
+          correct: previous.correct + (isCorrect ? 1 : 0),
+          mistakes: previous.mistakes + (isCorrect ? 0 : 1),
+          rounds: previous.rounds + 1,
+          conflictTrials: previous.conflictTrials + (isConflictTrial ? 1 : 0),
+          conflictCorrect: previous.conflictCorrect + (isConflictTrial && isCorrect ? 1 : 0),
+          shiftedTrials: previous.shiftedTrials + (isShiftedTrial ? 1 : 0),
+          shiftedCorrect: previous.shiftedCorrect + (isShiftedTrial && isCorrect ? 1 : 0),
+          currentStreak: nextStreak,
+          bestStreak: Math.max(previous.bestStreak, nextStreak),
+          responseTimes: isCorrect ? [...previous.responseTimes, responseMs] : previous.responseTimes,
+        };
+      });
+
+      window.setTimeout(() => {
+        if (!vfEndedRef.current) vfNextRound();
+      }, 240);
+    },
+    [vfLocked, vfNextRound, vfPhase, vfRound.targetDirection, vfRound.trialType],
+  );
+
+  useEffect(() => {
     if (vfPhase !== "playing" || vfLocked || vfEndedRef.current) return;
 
-    const isCorrect = direction === vfRound.targetDirection;
-    const responseMs = Date.now() - vfRoundStartRef.current;
-    setVfLocked(true);
-    setVfFeedback(isCorrect ? "correct" : "wrong");
-    setVfStats((previous) => {
-      const nextStreak = isCorrect ? previous.currentStreak + 1 : 0;
-      const isConflictTrial = vfRound.trialType === "conflict" || vfRound.trialType === "interference";
-      const isShiftedTrial = vfRound.trialType === "shift";
-      return {
-        ...previous,
-        correct: previous.correct + (isCorrect ? 1 : 0),
-        mistakes: previous.mistakes + (isCorrect ? 0 : 1),
-        rounds: previous.rounds + 1,
-        conflictTrials: previous.conflictTrials + (isConflictTrial ? 1 : 0),
-        conflictCorrect: previous.conflictCorrect + (isConflictTrial && isCorrect ? 1 : 0),
-        shiftedTrials: previous.shiftedTrials + (isShiftedTrial ? 1 : 0),
-        shiftedCorrect: previous.shiftedCorrect + (isShiftedTrial && isCorrect ? 1 : 0),
-        currentStreak: nextStreak,
-        bestStreak: Math.max(previous.bestStreak, nextStreak),
-        responseTimes: isCorrect ? [...previous.responseTimes, responseMs] : previous.responseTimes,
+    const handleVectorKeyDown = (event: KeyboardEvent) => {
+      const keyToDirection: Partial<Record<string, VfDirection>> = {
+        ArrowUp: "up",
+        ArrowDown: "down",
+        ArrowLeft: "left",
+        ArrowRight: "right",
+        w: "up",
+        W: "up",
+        s: "down",
+        S: "down",
+        a: "left",
+        A: "left",
+        d: "right",
+        D: "right",
       };
-    });
 
-    window.setTimeout(() => {
-      if (!vfEndedRef.current) vfNextRound();
-    }, 240);
-  };
+      const direction = keyToDirection[event.key];
+      if (!direction) return;
+
+      event.preventDefault();
+      vfHandleAnswer(direction);
+    };
+
+    window.addEventListener("keydown", handleVectorKeyDown);
+    return () => window.removeEventListener("keydown", handleVectorKeyDown);
+  }, [vfHandleAnswer, vfLocked, vfPhase]);
 
   const vfAccuracy =
     vfStats.correct + vfStats.mistakes > 0
@@ -1355,7 +1388,7 @@ v0.2 prototype index
                     <p className="mt-1 font-mono text-lg font-semibold text-[#d4af37]">
                       Highlighted gold vector only
                     </p>
-                    <p className="mt-1 text-xs text-zinc-600">Choose the direction it points. Ignore the surrounding field.</p>
+                    <p className="mt-1 text-xs text-zinc-600">Choose the direction it points. Use buttons, arrow keys, or WASD. Ignore the surrounding field.</p>
                   </div>
 
                   <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
