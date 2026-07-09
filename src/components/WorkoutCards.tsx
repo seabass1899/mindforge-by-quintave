@@ -10,10 +10,10 @@ export function WorkoutCards({
   onStartDaily: () => void;
 }) {
   return (
-    <section className="mt-10 sm:mt-14">
+    <section className="mt-10 sm:mt-14" aria-label="Today's cognitive workout">
       <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#0f1629]/90 to-[#0a0f1c]/90 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.6)] backdrop-blur-sm">
-        <div className="border-b border-white/[0.06] px-6 py-5 sm:px-8">
-          <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="border-b border-white/[0.06] px-5 py-5 sm:px-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#d4af37]/80">
                 Daily protocol
@@ -22,10 +22,10 @@ export function WorkoutCards({
                 Today&apos;s Cognitive Workout
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-500">
-                Run all three drills in sequence and receive a combined Cognitive Performance Index.
+                Complete all three v0.2 drills in sequence and receive a combined Cognitive Performance Index.
               </p>
             </div>
-            <div className="flex flex-col items-start gap-3 sm:items-end">
+            <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end">
               <div className="flex items-center gap-2 text-sm text-zinc-500">
                 <span className="font-mono text-[#d4af37]">3</span>
                 <span>drills live</span>
@@ -33,7 +33,7 @@ export function WorkoutCards({
               <button
                 type="button"
                 onClick={onStartDaily}
-                className="inline-flex h-10 items-center justify-center rounded-lg bg-gradient-to-r from-[#c9a227] to-[#d4af37] px-5 text-sm font-semibold text-[#060912] shadow-[0_0_24px_-8px_rgba(212,175,55,0.7)] transition hover:brightness-110"
+                className="inline-flex h-11 w-full items-center justify-center rounded-lg bg-gradient-to-r from-[#c9a227] to-[#d4af37] px-5 text-sm font-semibold text-[#060912] shadow-[0_0_24px_-8px_rgba(212,175,55,0.7)] transition hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37] sm:w-auto"
               >
                 Begin Daily Forge
               </button>
@@ -41,11 +41,11 @@ export function WorkoutCards({
           </div>
         </div>
 
-        <div className="grid gap-px bg-white/[0.04] sm:grid-cols-3">
+        <div className="grid gap-px bg-white/[0.04] md:grid-cols-3">
           {drillCatalog.map((drill, index) => (
             <article
               key={drill.id}
-              className={`flex flex-col px-6 py-6 sm:px-7 sm:py-7 ${
+              className={`flex flex-col px-5 py-6 transition sm:px-7 sm:py-7 ${
                 selectedDrill === drill.id
                   ? "bg-[#0d1424] ring-1 ring-inset ring-[#d4af37]/20"
                   : "bg-[#0a0f1c]"
@@ -64,7 +64,7 @@ export function WorkoutCards({
                 <button
                   type="button"
                   onClick={() => onStart(drill.id)}
-                  className="text-xs font-medium text-[#d4af37] transition hover:text-[#f0d78c]"
+                  className="rounded-full px-2 py-1 text-xs font-medium text-[#d4af37] transition hover:bg-[#d4af37]/10 hover:text-[#f0d78c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]"
                 >
                   Start →
                 </button>

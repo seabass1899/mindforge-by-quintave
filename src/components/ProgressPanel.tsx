@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import {
   average,
   calculateStreak,
@@ -62,6 +65,12 @@ function formatDelta(value: number): string {
   return value > 0 ? `+${value.toLocaleString()}` : value.toLocaleString();
 }
 
+function deltaTone(value: number): "positive" | "negative" | "neutral" {
+  if (value > 0) return "positive";
+  if (value < 0) return "negative";
+  return "neutral";
+}
+
 export function ProgressPanel({
   sessions,
   onClear,
@@ -69,6 +78,7 @@ export function ProgressPanel({
   sessions: DailySession[];
   onClear: () => void;
 }) {
+  const [isConfirmingClear, setIsConfirmingClear] = useState(false);
   const recentSessions = sessions.slice(0, 7);
   const summaries = buildDomainSummaries(recentSessions);
   const averageCpi = average(recentSessions.map((session) => session.cpi));
@@ -80,14 +90,24 @@ export function ProgressPanel({
   const previous = recentSessions[1];
   const cpiDelta = latest && previous ? latest.cpi - previous.cpi : 0;
   const maxDomainAverage = Math.max(...summaries.map((summary) => summary.average), 1);
+  const hasTrend = recentSessions.length > 1;
+
+  const handleClear = () => {
+    if (!isConfirmingClear) {
+      setIsConfirmingClear(true);
+      return;
+    }
+    onClear();
+    setIsConfirmingClear(false);
+  };
 
   return (
     <section
       className="mt-10 overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#0f1629]/90 to-[#0a0f1c]/90 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.48)] backdrop-blur-sm sm:mt-12"
       aria-label="Progress dashboard"
     >
-      <div className="border-b border-white/[0.06] px-6 py-5 sm:px-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="border-b border-white/[0.06] px-5 py-5 sm:px-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#d4af37]/80">
               Progress dashboard
@@ -96,23 +116,39 @@ export function ProgressPanel({
               Cognitive Performance Dashboard
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-zinc-500">
-              Your recent Daily Forge history, domain balance, streak, and next training focus. Results are stored locally in this browser until the database layer is added.
+              Review your Daily Forge trend, domain balance, streak, and next training focus. Results stay local in this browser until the database layer is added.
             </p>
           </div>
           {sessions.length > 0 && (
-            <button
-              type="button"
-              onClick={onClear}
-              className="rounded-full border border-white/[0.08] px-4 py-2 text-xs font-medium text-zinc-500 transition hover:border-[#d4af37]/30 hover:text-[#d4af37]"
-            >
-              Clear local history
-            </button>
+            <div className="flex flex-col gap-2 sm:flex-row lg:items-center">
+              {isConfirmingClear && (
+                <button
+                  type="button"
+                  onClick={() => setIsConfirmingClear(false)}
+                  className="rounded-full border border-white/[0.08] px-4 py-2 text-xs font-medium text-zinc-500 transition hover:border-white/20 hover:text-zinc-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleClear}
+                className={[
+                  "rounded-full border px-4 py-2 text-xs font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]",
+                  isConfirmingClear
+                    ? "border-red-400/30 bg-red-500/10 text-red-200 hover:border-red-300/50"
+                    : "border-white/[0.08] text-zinc-500 hover:border-[#d4af37]/30 hover:text-[#d4af37]",
+                ].join(" ")}
+              >
+                {isConfirmingClear ? "Confirm clear history" : "Clear local history"}
+              </button>
+            </div>
           )}
         </div>
       </div>
 
       {sessions.length === 0 ? (
-        <div className="px-6 py-8 sm:px-8">
+        <div className="px-5 py-8 sm:px-8">
           <div className="rounded-xl border border-dashed border-white/[0.08] bg-[#0a0f1c]/70 p-8 text-center">
             <p className="text-sm font-medium text-white">No progress recorded yet.</p>
             <p className="mt-2 text-sm text-zinc-500">
@@ -121,23 +157,25 @@ export function ProgressPanel({
           </div>
         </div>
       ) : (
-        <div className="space-y-6 px-6 py-6 sm:px-8 sm:py-8">
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/5 p-5 md:col-span-1">
+        <div className="space-y-6 px-5 py-6 sm:px-8 sm:py-8">
+          <div className="grid gap-3 xl:grid-cols-[1.15fr_2fr]">
+            <div className="rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/5 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
               <p className="text-[10px] uppercase tracking-[0.22em] text-[#d4af37]/80">Current average</p>
               <p className="mt-2 font-mono text-4xl font-semibold text-white">{averageCpi.toLocaleString()}</p>
-              <p className="mt-1 text-sm text-zinc-500">Average CPI across last {recentSessions.length} session{recentSessions.length === 1 ? "" : "s"}.</p>
+              <p className="mt-1 text-sm text-zinc-500">
+                Average CPI across last {recentSessions.length} session{recentSessions.length === 1 ? "" : "s"}.
+              </p>
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <CompactMetric label="Best CPI" value={bestCpi.toLocaleString()} />
                 <CompactMetric
                   label="Last change"
-                  value={recentSessions.length > 1 ? formatDelta(cpiDelta) : "—"}
-                  accent={cpiDelta > 0 ? "positive" : cpiDelta < 0 ? "negative" : "neutral"}
+                  value={hasTrend ? formatDelta(cpiDelta) : "Baseline"}
+                  accent={hasTrend ? deltaTone(cpiDelta) : "neutral"}
                 />
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 md:col-span-2 lg:grid-cols-4">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <DashboardMetric label="Streak" value={`${streak}d`} detail="Consecutive training days" />
               <DashboardMetric label="Sessions" value={sessions.length.toLocaleString()} detail="Saved locally" />
               <DashboardMetric label="Best domain" value={strongest} detail="Highest recent average" />
@@ -145,7 +183,7 @@ export function ProgressPanel({
             </div>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-[1fr_1.25fr]">
+          <div className="grid gap-6 xl:grid-cols-[0.95fr_1.35fr]">
             <div className="rounded-xl border border-white/[0.06] bg-[#0a0f1c]/60 p-5">
               <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
@@ -160,7 +198,7 @@ export function ProgressPanel({
               <div className="space-y-5">
                 {summaries.map((summary) => {
                   const width = Math.max(8, Math.round((summary.average / maxDomainAverage) * 100));
-                  const latestDelta = summary.latest - summary.average;
+                  const latestDelta = Math.round(summary.latest - summary.average);
 
                   return (
                     <div key={summary.key}>
@@ -176,13 +214,24 @@ export function ProgressPanel({
                       </div>
                       <div className="h-2.5 overflow-hidden rounded-full bg-white/[0.06]">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-[#8c741e] to-[#d4af37]"
+                          className="h-full rounded-full bg-gradient-to-r from-[#8c741e] to-[#d4af37] transition-all duration-500"
                           style={{ width: `${width}%` }}
                         />
                       </div>
-                      <p className="mt-1 text-xs text-zinc-600">
-                        Latest vs avg: {formatDelta(Math.round(latestDelta))}
-                      </p>
+                      {hasTrend && (
+                        <p
+                          className={[
+                            "mt-1 text-xs",
+                            latestDelta > 0
+                              ? "text-emerald-300/70"
+                              : latestDelta < 0
+                                ? "text-red-300/70"
+                                : "text-zinc-600",
+                          ].join(" ")}
+                        >
+                          Latest vs avg: {formatDelta(latestDelta)}
+                        </p>
+                      )}
                     </div>
                   );
                 })}
@@ -204,23 +253,24 @@ export function ProgressPanel({
                 {recentSessions.map((session, index) => (
                   <div
                     key={session.id}
-                    className="grid gap-3 rounded-xl border border-white/[0.06] bg-[#080c16]/80 p-4 sm:grid-cols-[auto_1fr_auto] sm:items-center"
+                    className="rounded-xl border border-white/[0.06] bg-[#080c16]/80 p-4"
                   >
-                    <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#d4af37]/20 bg-[#d4af37]/10 font-mono text-xs text-[#d4af37]">
-                      {String(index + 1).padStart(2, "0")}
-                    </div>
-                    <div>
-                      <p className="text-sm font-semibold text-white">
-                        CPI {session.cpi.toLocaleString()}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        {formatSessionDate(session.completedAt)} · Strength: {session.primaryStrength} · Focus: {session.recommendedFocus}
-                      </p>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2 text-right sm:min-w-72">
-                      <MiniScore label="MEM" value={session.memory} />
-                      <MiniScore label="FOC" value={session.focus} />
-                      <MiniScore label="FLEX" value={session.flexibility} />
+                    <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-start lg:grid-cols-[auto_1fr_auto]">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[#d4af37]/20 bg-[#d4af37]/10 font-mono text-xs text-[#d4af37]">
+                        {String(index + 1).padStart(2, "0")}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">CPI {session.cpi.toLocaleString()}</p>
+                        <p className="mt-1 text-xs text-zinc-500">{formatSessionDate(session.completedAt)}</p>
+                        <p className="mt-1 text-xs text-zinc-600">
+                          Strength: {session.primaryStrength} · Train next: {session.recommendedFocus}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 text-left sm:col-span-2 lg:col-span-1 lg:min-w-72 lg:text-right">
+                        <MiniScore label="MEM" value={session.memory} />
+                        <MiniScore label="FOC" value={session.focus} />
+                        <MiniScore label="FLEX" value={session.flexibility} />
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -235,7 +285,7 @@ export function ProgressPanel({
 
 function DashboardMetric({ label, value, detail }: { label: string; value: string | number; detail: string }) {
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-[#0a0f1c]/70 px-4 py-4">
+    <div className="rounded-xl border border-white/[0.06] bg-[#0a0f1c]/70 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
       <p className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</p>
       <p className="mt-1 font-mono text-xl text-white">{value}</p>
       <p className="mt-2 text-xs leading-relaxed text-zinc-600">{detail}</p>

@@ -98,6 +98,7 @@ export function MindForgeApp() {
   const [dailyScores, setDailyScores] = useState<DailyScores>({});
   const [sessionHistory, setSessionHistory] = useState<DailySession[]>([]);
   const drillRef = useRef<HTMLElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSessionHistory(readDailySessions());
@@ -106,6 +107,12 @@ export function MindForgeApp() {
   const scrollToDrill = useCallback(() => {
     window.setTimeout(() => {
       drillRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 40);
+  }, []);
+
+  const scrollToProgress = useCallback(() => {
+    window.setTimeout(() => {
+      progressRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 40);
   }, []);
 
@@ -600,7 +607,7 @@ export function MindForgeApp() {
       <div className="relative mx-auto flex min-h-screen max-w-5xl flex-col px-6 py-10 sm:px-10 sm:py-14 lg:px-12">
         <Header />
         <main className="mt-12 flex flex-1 flex-col sm:mt-16">
-          <Hero />
+          <Hero onStartDaily={startDailyForge} onViewProgress={scrollToProgress} />
           <WorkoutCards selectedDrill={selectedDrill} onStart={startDrill} onStartDaily={startDailyForge} />
 
           <section ref={drillRef} className="mt-10 scroll-mt-8 sm:mt-12" aria-label="Drill arena">
@@ -612,7 +619,9 @@ export function MindForgeApp() {
             {selectedDrill === "daily-summary" && renderDailySummary()}
           </section>
 
-          <ProgressPanel sessions={sessionHistory} onClear={clearProgressHistory} />
+          <div ref={progressRef} className="scroll-mt-8">
+            <ProgressPanel sessions={sessionHistory} onClear={clearProgressHistory} />
+          </div>
         </main>
 
         <footer className="mt-16 border-t border-white/[0.05] pt-8 text-center text-xs text-zinc-600 sm:mt-20">
@@ -698,7 +707,7 @@ export function MindForgeApp() {
               {index.toLocaleString()}
             </p>
             <p className="mt-2 text-sm text-zinc-400">
-              v0.1 baseline score
+v0.2 prototype index
             </p>
 
             <div className="mt-7 grid gap-3 text-left sm:grid-cols-3">
@@ -729,7 +738,7 @@ export function MindForgeApp() {
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-zinc-500">
-              This prototype index averages the three live MindForge domains and saves this Daily Forge result locally in your browser.
+              This prototype index averages the three live MindForge domains and saves the completed Daily Forge result locally in your browser.
             </p>
 
             <div className="mt-6 flex flex-col gap-3 sm:flex-row">
