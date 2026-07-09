@@ -1316,115 +1316,194 @@ v0.2 prototype index
   }
 
   function renderVectorField() {
-    const answerButtons: VfDirection[] = ["up", "left", "right", "down"];
+    const feedbackTone =
+      vfFeedback === "correct"
+        ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200"
+        : vfFeedback === "miss"
+          ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
+          : vfFeedback === "wrong"
+            ? "border-red-400/25 bg-red-400/10 text-red-200"
+            : "border-white/[0.06] bg-white/[0.03] text-zinc-400";
+
     return (
       <DrillShell
         drillNumber="04"
         category="Attention"
         title="Vector Field"
-        description="Identify the highlighted vector direction while suppressing the surrounding field of distractors."
+        description="Read the highlighted signal inside the field and answer its direction while ignoring surrounding noise."
         status={vfPhaseLabel(vfPhase)}
         onBack={goToSelection}
       >
         {vfPhase === "intro" && (
           <IntroCard
-            text="Read only the highlighted vector. Ignore the surrounding arrows, even when most of the field points somewhere else. Later rounds shift the active signal off-center and increase time pressure."
+            text="Enter the attention chamber. Read only the highlighted gold vector, suppress the surrounding field, and respond fast. Supports arrow keys and WASD."
             buttonText="Start Vector Field"
             onStart={startVectorField}
           />
         )}
 
         {(vfPhase === "playing" || vfPhase === "result") && (
-          <div className="mx-auto max-w-2xl">
+          <div className="mx-auto max-w-5xl">
             {vfPhase === "playing" && (
               <>
-                <TimerBar label="Time remaining" value={`${vfTimeLeft}s`} />
-
-                <div className="mb-5 rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/5 px-5 py-4 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.22em] text-[#d4af37]/80">Attention rule</p>
-                  <p className="mt-1 font-mono text-lg font-semibold text-[#f0d78c]">
-                    {vfTrialLabel(vfRound.trialType)} · Level {vfRound.level}
-                  </p>
-                  <p className="mt-2 text-xs leading-relaxed text-zinc-500">
-                    {vfTrialInstruction(vfRound.trialType)}
-                  </p>
-                </div>
-
-                <MetricGrid
-                  metrics={[
-                    { label: "Correct", value: vfStats.correct },
-                    { label: "Errors", value: vfStats.mistakes + vfStats.misses },
-                    { label: "Streak", value: vfStats.currentStreak },
-                    { label: "Accuracy", value: `${vfAccuracy}%` },
-                  ]}
-                />
-
-                <div className="rounded-2xl border border-white/[0.08] bg-[#060912]/60 p-4 sm:p-5">
-                  <div className="mx-auto grid max-w-sm grid-cols-3 gap-2.5 sm:gap-3" aria-label="Vector field board">
-                    {vfRound.cells.map((cell, index) => {
-                      const isTarget = cell.isTarget;
-                      const isInterference = vfRound.trialType === "interference" && !isTarget;
-
-                      return (
-                        <div
-                          key={`${vfRoundNumber}-${index}`}
-                          className={[
-                            "flex aspect-square items-center justify-center rounded-xl border text-3xl font-semibold transition-all duration-200 sm:text-4xl",
-                            isTarget
-                              ? "scale-[1.03] border-[#d4af37] bg-[#d4af37]/20 text-[#f0d78c] shadow-[0_0_30px_-6px_rgba(212,175,55,0.8)]"
-                              : isInterference
-                                ? "border-red-400/20 bg-red-500/5 text-red-300/35"
-                                : "border-white/[0.06] bg-[#0a0f1c] text-[#4a6a8a]/70",
-                          ].join(" ")}
-                        >
-                          {vfDirectionSymbol(cell.direction)}
+                <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+                  <div className="space-y-4">
+                    <div className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#060912]/70 shadow-[0_16px_48px_-20px_rgba(0,0,0,0.7)]">
+                      <div className="border-b border-white/[0.06] px-5 py-4">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-[#d4af37]/80">Attention rule</p>
+                        <p className="mt-1 font-mono text-lg font-semibold text-[#f0d78c]">
+                          {vfTrialLabel(vfRound.trialType)} · Level {vfRound.level}
+                        </p>
+                        <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+                          {vfTrialInstruction(vfRound.trialType)}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-px bg-white/[0.06]">
+                        <div className="bg-[#0a0f1c]/70 px-5 py-4">
+                          <p className="text-[10px] uppercase tracking-wider text-zinc-500">Time</p>
+                          <p className="mt-1 font-mono text-3xl font-semibold text-[#f0d78c]">{vfTimeLeft}s</p>
                         </div>
-                      );
-                    })}
-                  </div>
+                        <div className="bg-[#0a0f1c]/70 px-5 py-4">
+                          <p className="text-[10px] uppercase tracking-wider text-zinc-500">Streak</p>
+                          <p className="mt-1 font-mono text-3xl font-semibold text-white">{vfStats.currentStreak}</p>
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="mt-5 rounded-xl border border-white/[0.06] bg-[#0a0f1c]/70 px-4 py-3 text-center">
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">Active signal</p>
-                    <p className="mt-1 font-mono text-lg font-semibold text-[#d4af37]">
-                      Highlighted gold vector only
-                    </p>
-                    <p className="mt-1 text-xs text-zinc-600">Choose the direction it points. Use buttons, arrow keys, or WASD. Ignore the surrounding field.</p>
-                  </div>
+                    <MetricGrid
+                      metrics={[
+                        { label: "Correct", value: vfStats.correct },
+                        { label: "Errors", value: vfStats.mistakes + vfStats.misses },
+                        { label: "Accuracy", value: `${vfAccuracy}%` },
+                        { label: "Conflict", value: `${vfConflictAccuracy}%` },
+                      ]}
+                    />
 
-                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {answerButtons.map((direction) => (
-                      <button
-                        key={direction}
-                        type="button"
-                        onClick={() => vfHandleAnswer(direction)}
-                        disabled={vfLocked}
-                        className="inline-flex h-14 items-center justify-center rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/10 font-mono text-2xl font-semibold text-[#f0d78c] transition hover:border-[#d4af37]/45 hover:bg-[#d4af37]/15 disabled:cursor-default disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]"
-                        aria-label={`Answer ${vfDirectionLabel(direction)}`}
-                      >
-                        {vfDirectionSymbol(direction)}
-                      </button>
-                    ))}
-                  </div>
-
-                  {vfFeedback && (
-                    <p
-                      className={[
-                        "mt-4 text-center text-sm font-medium",
-                        vfFeedback === "correct"
-                          ? "text-emerald-300"
+                    <div className={["rounded-2xl border px-4 py-4 text-sm leading-relaxed shadow-[0_12px_30px_-18px_rgba(0,0,0,0.7)]", feedbackTone].join(" ")}>
+                      <p className="text-[10px] uppercase tracking-[0.22em] text-current/80">Signal feed</p>
+                      <p className="mt-2 font-medium">
+                        {vfFeedback === "correct"
+                          ? "Signal acquired."
                           : vfFeedback === "miss"
-                            ? "text-amber-300"
-                            : "text-red-300",
-                      ].join(" ")}
-                    >
-                      {vfFeedback === "correct" ? "Locked." : vfFeedback === "miss" ? "Missed signal." : "Wrong direction."}
-                    </p>
-                  )}
-                </div>
+                            ? "Signal lost."
+                            : vfFeedback === "wrong"
+                              ? "Direction mismatch."
+                              : "Focus the highlighted gold vector and ignore the surrounding field."}
+                      </p>
+                    </div>
+                  </div>
 
-                <p className="mt-5 text-center text-sm text-zinc-500">
-                  The highlighted vector is the signal. The surrounding field is noise.
-                </p>
+                  <div className="relative overflow-hidden rounded-[30px] border border-cyan-400/10 bg-[radial-gradient(circle_at_top,_rgba(18,56,97,0.55),_rgba(5,9,18,0.96)_58%)] px-4 py-5 shadow-[0_30px_90px_-24px_rgba(0,0,0,0.78)] sm:px-6 sm:py-6">
+                    <div className="pointer-events-none absolute inset-0">
+                      <div className="absolute left-1/2 top-1/2 h-[26rem] w-[26rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300/8" />
+                      <div className="absolute left-1/2 top-1/2 h-[19rem] w-[19rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300/8" />
+                      <div className="absolute left-1/2 top-1/2 h-[12rem] w-[12rem] -translate-x-1/2 -translate-y-1/2 rounded-full border border-cyan-300/10" />
+                      <div className="absolute inset-x-6 top-1/2 h-px -translate-y-1/2 bg-cyan-300/8" />
+                      <div className="absolute inset-y-6 left-1/2 w-px -translate-x-1/2 bg-cyan-300/8" />
+                      <div className="absolute left-[14%] top-[20%] h-2 w-2 rounded-full bg-cyan-300/25" />
+                      <div className="absolute right-[18%] top-[28%] h-1.5 w-1.5 rounded-full bg-cyan-300/30" />
+                      <div className="absolute bottom-[24%] left-[20%] h-1.5 w-1.5 rounded-full bg-cyan-300/25" />
+                      <div className="absolute bottom-[18%] right-[24%] h-2 w-2 rounded-full bg-cyan-300/20" />
+                    </div>
+
+                    <div className="relative z-10">
+                      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-[0.24em] text-cyan-200/70">Signal chamber</p>
+                          <h3 className="mt-1 text-lg font-semibold text-white sm:text-xl">Active vector field</h3>
+                          <p className="mt-1 text-sm text-zinc-400">Read the gold signal only. The blue vectors are noise.</p>
+                        </div>
+                        <div className="rounded-full border border-[#d4af37]/25 bg-[#d4af37]/10 px-3 py-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-[#f0d78c]">
+                          Arrow keys / WASD
+                        </div>
+                      </div>
+
+                      <div className="mx-auto grid max-w-md grid-cols-3 gap-3 sm:gap-4" aria-label="Vector field board">
+                        {vfRound.cells.map((cell, index) => {
+                          const isTarget = cell.isTarget;
+                          const isInterference = vfRound.trialType === "interference" && !isTarget;
+
+                          return (
+                            <div
+                              key={`${vfRoundNumber}-${index}`}
+                              className={[
+                                "relative flex aspect-square items-center justify-center overflow-hidden rounded-[24px] border text-4xl font-semibold transition-all duration-200 sm:text-5xl",
+                                isTarget
+                                  ? "scale-[1.035] border-[#d4af37]/60 bg-[radial-gradient(circle_at_center,_rgba(212,175,55,0.30),_rgba(212,175,55,0.08)_45%,_rgba(10,15,28,0.92)_100%)] text-[#f6df95] shadow-[0_0_42px_-8px_rgba(212,175,55,0.95)]"
+                                  : isInterference
+                                    ? "border-red-400/15 bg-[radial-gradient(circle_at_center,_rgba(239,68,68,0.08),_rgba(10,15,28,0.92)_75%)] text-red-300/35"
+                                    : "border-cyan-300/10 bg-[radial-gradient(circle_at_center,_rgba(34,211,238,0.08),_rgba(10,15,28,0.9)_70%)] text-[#5a7ca1]/80",
+                              ].join(" ")}
+                            >
+                              {isTarget && <div className="absolute inset-2 rounded-[18px] border border-[#f0d78c]/30" />}
+                              <span className="relative z-10">{vfDirectionSymbol(cell.direction)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="mx-auto mt-6 max-w-xl rounded-2xl border border-white/[0.08] bg-[#07101d]/70 p-4 sm:p-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">Response pad</p>
+                            <p className="mt-1 text-sm text-zinc-400">Choose the direction of the highlighted gold vector.</p>
+                          </div>
+                          <div className="rounded-full border border-cyan-300/10 bg-cyan-300/5 px-3 py-1 text-xs text-cyan-100/70">
+                            {vfTrialInstruction(vfRound.trialType)}
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-3 gap-3">
+                          <div />
+                          <button
+                            type="button"
+                            onClick={() => vfHandleAnswer("up")}
+                            disabled={vfLocked}
+                            className="inline-flex h-14 items-center justify-center rounded-2xl border border-[#d4af37]/20 bg-[#d4af37]/10 font-mono text-2xl font-semibold text-[#f0d78c] transition hover:border-[#d4af37]/45 hover:bg-[#d4af37]/15 disabled:cursor-default disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]"
+                            aria-label="Answer up"
+                          >
+                            {vfDirectionSymbol("up")}
+                          </button>
+                          <div />
+
+                          <button
+                            type="button"
+                            onClick={() => vfHandleAnswer("left")}
+                            disabled={vfLocked}
+                            className="inline-flex h-14 items-center justify-center rounded-2xl border border-[#d4af37]/20 bg-[#d4af37]/10 font-mono text-2xl font-semibold text-[#f0d78c] transition hover:border-[#d4af37]/45 hover:bg-[#d4af37]/15 disabled:cursor-default disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]"
+                            aria-label="Answer left"
+                          >
+                            {vfDirectionSymbol("left")}
+                          </button>
+                          <div className="flex items-center justify-center rounded-2xl border border-white/[0.06] bg-white/[0.03] px-3 text-center text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                            Keys live
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => vfHandleAnswer("right")}
+                            disabled={vfLocked}
+                            className="inline-flex h-14 items-center justify-center rounded-2xl border border-[#d4af37]/20 bg-[#d4af37]/10 font-mono text-2xl font-semibold text-[#f0d78c] transition hover:border-[#d4af37]/45 hover:bg-[#d4af37]/15 disabled:cursor-default disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]"
+                            aria-label="Answer right"
+                          >
+                            {vfDirectionSymbol("right")}
+                          </button>
+
+                          <div />
+                          <button
+                            type="button"
+                            onClick={() => vfHandleAnswer("down")}
+                            disabled={vfLocked}
+                            className="inline-flex h-14 items-center justify-center rounded-2xl border border-[#d4af37]/20 bg-[#d4af37]/10 font-mono text-2xl font-semibold text-[#f0d78c] transition hover:border-[#d4af37]/45 hover:bg-[#d4af37]/15 disabled:cursor-default disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]"
+                            aria-label="Answer down"
+                          >
+                            {vfDirectionSymbol("down")}
+                          </button>
+                          <div />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
 
