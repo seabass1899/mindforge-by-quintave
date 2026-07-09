@@ -8,7 +8,7 @@ export function SelectionPanel({ onSelect }: { onSelect: (id: PlayableDrillId) =
         <h2 className="mt-1 text-xl font-semibold tracking-tight text-white sm:text-2xl">Choose Your Workout</h2>
         <p className="mt-2 text-sm leading-relaxed text-zinc-500">Pick a cognitive domain to train individually, or use Daily Forge for the complete sequence.</p>
       </div>
-      <div className="grid gap-4 px-5 py-6 sm:grid-cols-3 sm:px-8 sm:py-8">
+      <div className="grid gap-4 px-5 py-6 sm:grid-cols-2 lg:grid-cols-4 sm:px-8 sm:py-8">
         {drillCatalog.map((drill) => (
           <button
             key={drill.id}

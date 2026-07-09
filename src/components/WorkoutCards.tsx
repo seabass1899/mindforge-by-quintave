@@ -22,12 +22,12 @@ export function WorkoutCards({
                 Today&apos;s Cognitive Workout
               </h2>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-500">
-                Complete all three v0.2 drills in sequence and receive a combined Cognitive Performance Index.
+                Complete the three core Daily Forge drills, or launch Vector Field as an advanced selective-attention lab.
               </p>
             </div>
             <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center lg:flex-col lg:items-end">
               <div className="flex items-center gap-2 text-sm text-zinc-500">
-                <span className="font-mono text-[#d4af37]">3</span>
+                <span className="font-mono text-[#d4af37]">4</span>
                 <span>drills live</span>
               </div>
               <button
@@ -41,7 +41,7 @@ export function WorkoutCards({
           </div>
         </div>
 
-        <div className="grid gap-px bg-white/[0.04] md:grid-cols-3">
+        <div className="grid gap-px bg-white/[0.04] md:grid-cols-4">
           {drillCatalog.map((drill, index) => (
             <article
               key={drill.id}

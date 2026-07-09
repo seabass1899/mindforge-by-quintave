@@ -74,6 +74,21 @@ import {
   type CsRound,
   type CsStats,
 } from "@/lib/cognitive-switch";
+import {
+  VF_DURATION_SEC,
+  vfCalculateScore,
+  vfDirectionLabel,
+  vfDirectionSymbol,
+  vfGenerateRound,
+  vfInitialStats,
+  vfPhaseLabel,
+  vfTrialInstruction,
+  vfTrialLabel,
+  type VfDirection,
+  type VfPhase,
+  type VfRound,
+  type VfStats,
+} from "@/lib/vector-field";
 
 type WorkoutMode = "single" | "daily";
 
@@ -532,6 +547,151 @@ export function MindForgeApp() {
       ? Math.round(csStats.responseTimes.reduce((a, b) => a + b, 0) / csStats.responseTimes.length)
       : 0;
 
+  // Vector Field state
+  const [vfPhase, setVfPhase] = useState<VfPhase>("intro");
+  const [vfRoundNumber, setVfRoundNumber] = useState(1);
+  const [vfRound, setVfRound] = useState<VfRound>(() => vfGenerateRound(1));
+  const [vfTimeLeft, setVfTimeLeft] = useState(VF_DURATION_SEC);
+  const [vfFeedback, setVfFeedback] = useState<"correct" | "wrong" | "miss" | null>(null);
+  const [vfLocked, setVfLocked] = useState(false);
+  const [vfStats, setVfStats] = useState<VfStats>(() => vfInitialStats());
+  const vfRoundStartRef = useRef(0);
+  const vfEndedRef = useRef(false);
+
+  const resetVectorField = useCallback(() => {
+    const firstRound = vfGenerateRound(1);
+    vfEndedRef.current = false;
+    setVfPhase("intro");
+    setVfRoundNumber(1);
+    setVfRound(firstRound);
+    setVfTimeLeft(VF_DURATION_SEC);
+    setVfFeedback(null);
+    setVfLocked(false);
+    setVfStats(vfInitialStats());
+  }, []);
+
+  const vfEndGame = useCallback((current: VfStats) => {
+    if (vfEndedRef.current) return;
+    vfEndedRef.current = true;
+    setVfStats({ ...current, finalScore: vfCalculateScore(current) });
+    setVfPhase("result");
+    setVfFeedback(null);
+    setVfLocked(false);
+  }, []);
+
+  const startVectorField = useCallback(() => {
+    const firstRound = vfGenerateRound(1);
+    vfEndedRef.current = false;
+    setVfRoundNumber(1);
+    setVfRound(firstRound);
+    setVfTimeLeft(VF_DURATION_SEC);
+    setVfFeedback(null);
+    setVfLocked(false);
+    setVfStats(vfInitialStats());
+    vfRoundStartRef.current = Date.now();
+    setVfPhase("playing");
+    setSelectedDrill("vector-field");
+    scrollToDrill();
+  }, [scrollToDrill]);
+
+  const vfNextRound = useCallback(() => {
+    setVfRoundNumber((currentRoundNumber) => {
+      const nextRoundNumber = currentRoundNumber + 1;
+      setVfRound(vfGenerateRound(nextRoundNumber));
+      return nextRoundNumber;
+    });
+    setVfFeedback(null);
+    setVfLocked(false);
+    vfRoundStartRef.current = Date.now();
+  }, []);
+
+  useEffect(() => {
+    if (vfPhase !== "playing") return;
+
+    const tick = window.setInterval(() => {
+      setVfTimeLeft((previous) => {
+        if (previous <= 1) {
+          window.clearInterval(tick);
+          setVfStats((current) => {
+            vfEndGame(current);
+            return current;
+          });
+          return 0;
+        }
+        return previous - 1;
+      });
+    }, 1000);
+
+    return () => window.clearInterval(tick);
+  }, [vfPhase, vfEndGame]);
+
+  useEffect(() => {
+    if (vfPhase !== "playing" || vfLocked || vfEndedRef.current) return;
+
+    const timeout = window.setTimeout(() => {
+      if (vfEndedRef.current) return;
+      setVfLocked(true);
+      setVfFeedback("miss");
+      setVfStats((previous) => ({
+        ...previous,
+        misses: previous.misses + 1,
+        rounds: previous.rounds + 1,
+        conflictTrials: previous.conflictTrials + (vfRound.trialType === "conflict" || vfRound.trialType === "interference" ? 1 : 0),
+        shiftedTrials: previous.shiftedTrials + (vfRound.trialType === "shift" ? 1 : 0),
+        currentStreak: 0,
+      }));
+      window.setTimeout(() => {
+        if (!vfEndedRef.current) vfNextRound();
+      }, 260);
+    }, vfRound.timeoutMs);
+
+    return () => window.clearTimeout(timeout);
+  }, [vfLocked, vfPhase, vfRound, vfRoundNumber, vfNextRound]);
+
+  const vfHandleAnswer = (direction: VfDirection) => {
+    if (vfPhase !== "playing" || vfLocked || vfEndedRef.current) return;
+
+    const isCorrect = direction === vfRound.targetDirection;
+    const responseMs = Date.now() - vfRoundStartRef.current;
+    setVfLocked(true);
+    setVfFeedback(isCorrect ? "correct" : "wrong");
+    setVfStats((previous) => {
+      const nextStreak = isCorrect ? previous.currentStreak + 1 : 0;
+      const isConflictTrial = vfRound.trialType === "conflict" || vfRound.trialType === "interference";
+      const isShiftedTrial = vfRound.trialType === "shift";
+      return {
+        ...previous,
+        correct: previous.correct + (isCorrect ? 1 : 0),
+        mistakes: previous.mistakes + (isCorrect ? 0 : 1),
+        rounds: previous.rounds + 1,
+        conflictTrials: previous.conflictTrials + (isConflictTrial ? 1 : 0),
+        conflictCorrect: previous.conflictCorrect + (isConflictTrial && isCorrect ? 1 : 0),
+        shiftedTrials: previous.shiftedTrials + (isShiftedTrial ? 1 : 0),
+        shiftedCorrect: previous.shiftedCorrect + (isShiftedTrial && isCorrect ? 1 : 0),
+        currentStreak: nextStreak,
+        bestStreak: Math.max(previous.bestStreak, nextStreak),
+        responseTimes: isCorrect ? [...previous.responseTimes, responseMs] : previous.responseTimes,
+      };
+    });
+
+    window.setTimeout(() => {
+      if (!vfEndedRef.current) vfNextRound();
+    }, 240);
+  };
+
+  const vfAccuracy =
+    vfStats.correct + vfStats.mistakes > 0
+      ? Math.round((vfStats.correct / (vfStats.correct + vfStats.mistakes)) * 100)
+      : 100;
+
+  const vfConflictAccuracy =
+    vfStats.conflictTrials > 0 ? Math.round((vfStats.conflictCorrect / vfStats.conflictTrials) * 100) : 100;
+
+  const vfAvgResponseMs =
+    vfStats.responseTimes.length > 0
+      ? Math.round(vfStats.responseTimes.reduce((sum, value) => sum + value, 0) / vfStats.responseTimes.length)
+      : 0;
+
   const startDrill = (id: PlayableDrillId) => {
     setWorkoutMode("single");
     setDailyStepIndex(0);
@@ -539,6 +699,7 @@ export function MindForgeApp() {
     if (id === "recall-matrix") startRecallMatrix();
     if (id === "signal-lock") startSignalLock();
     if (id === "cognitive-switch") startCognitiveSwitch();
+    if (id === "vector-field") startVectorField();
   };
 
   const startDailyForge = () => {
@@ -600,6 +761,7 @@ export function MindForgeApp() {
     resetRecallMatrix();
     resetSignalLock();
     resetCognitiveSwitch();
+    resetVectorField();
   };
 
   return (
@@ -616,6 +778,7 @@ export function MindForgeApp() {
             {selectedDrill === "recall-matrix" && renderRecallMatrix()}
             {selectedDrill === "signal-lock" && renderSignalLock()}
             {selectedDrill === "cognitive-switch" && renderCognitiveSwitch()}
+            {selectedDrill === "vector-field" && renderVectorField()}
             {selectedDrill === "daily-summary" && renderDailySummary()}
           </section>
 
@@ -1118,4 +1281,145 @@ v0.2 prototype index
       </DrillShell>
     );
   }
+
+  function renderVectorField() {
+    const answerButtons: VfDirection[] = ["up", "left", "right", "down"];
+    return (
+      <DrillShell
+        drillNumber="04"
+        category="Attention"
+        title="Vector Field"
+        description="Identify the highlighted vector direction while suppressing the surrounding field of distractors."
+        status={vfPhaseLabel(vfPhase)}
+        onBack={goToSelection}
+      >
+        {vfPhase === "intro" && (
+          <IntroCard
+            text="Read only the highlighted vector. Ignore the surrounding arrows, even when most of the field points somewhere else. Later rounds shift the active signal off-center and increase time pressure."
+            buttonText="Start Vector Field"
+            onStart={startVectorField}
+          />
+        )}
+
+        {(vfPhase === "playing" || vfPhase === "result") && (
+          <div className="mx-auto max-w-2xl">
+            {vfPhase === "playing" && (
+              <>
+                <TimerBar label="Time remaining" value={`${vfTimeLeft}s`} />
+
+                <div className="mb-5 rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/5 px-5 py-4 text-center">
+                  <p className="text-[10px] uppercase tracking-[0.22em] text-[#d4af37]/80">Attention rule</p>
+                  <p className="mt-1 font-mono text-lg font-semibold text-[#f0d78c]">
+                    {vfTrialLabel(vfRound.trialType)} · Level {vfRound.level}
+                  </p>
+                  <p className="mt-2 text-xs leading-relaxed text-zinc-500">
+                    {vfTrialInstruction(vfRound.trialType)}
+                  </p>
+                </div>
+
+                <MetricGrid
+                  metrics={[
+                    { label: "Correct", value: vfStats.correct },
+                    { label: "Errors", value: vfStats.mistakes + vfStats.misses },
+                    { label: "Streak", value: vfStats.currentStreak },
+                    { label: "Accuracy", value: `${vfAccuracy}%` },
+                  ]}
+                />
+
+                <div className="rounded-2xl border border-white/[0.08] bg-[#060912]/60 p-4 sm:p-5">
+                  <div className="mx-auto grid max-w-sm grid-cols-3 gap-2.5 sm:gap-3" aria-label="Vector field board">
+                    {vfRound.cells.map((cell, index) => {
+                      const isTarget = cell.isTarget;
+                      const isInterference = vfRound.trialType === "interference" && !isTarget;
+
+                      return (
+                        <div
+                          key={`${vfRoundNumber}-${index}`}
+                          className={[
+                            "flex aspect-square items-center justify-center rounded-xl border text-3xl font-semibold transition-all duration-200 sm:text-4xl",
+                            isTarget
+                              ? "scale-[1.03] border-[#d4af37] bg-[#d4af37]/20 text-[#f0d78c] shadow-[0_0_30px_-6px_rgba(212,175,55,0.8)]"
+                              : isInterference
+                                ? "border-red-400/20 bg-red-500/5 text-red-300/35"
+                                : "border-white/[0.06] bg-[#0a0f1c] text-[#4a6a8a]/70",
+                          ].join(" ")}
+                        >
+                          {vfDirectionSymbol(cell.direction)}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-5 rounded-xl border border-white/[0.06] bg-[#0a0f1c]/70 px-4 py-3 text-center">
+                    <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">Active signal</p>
+                    <p className="mt-1 font-mono text-lg font-semibold text-[#d4af37]">
+                      Highlighted gold vector only
+                    </p>
+                    <p className="mt-1 text-xs text-zinc-600">Choose the direction it points. Ignore the surrounding field.</p>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {answerButtons.map((direction) => (
+                      <button
+                        key={direction}
+                        type="button"
+                        onClick={() => vfHandleAnswer(direction)}
+                        disabled={vfLocked}
+                        className="inline-flex h-14 items-center justify-center rounded-xl border border-[#d4af37]/20 bg-[#d4af37]/10 font-mono text-2xl font-semibold text-[#f0d78c] transition hover:border-[#d4af37]/45 hover:bg-[#d4af37]/15 disabled:cursor-default disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4af37]"
+                        aria-label={`Answer ${vfDirectionLabel(direction)}`}
+                      >
+                        {vfDirectionSymbol(direction)}
+                      </button>
+                    ))}
+                  </div>
+
+                  {vfFeedback && (
+                    <p
+                      className={[
+                        "mt-4 text-center text-sm font-medium",
+                        vfFeedback === "correct"
+                          ? "text-emerald-300"
+                          : vfFeedback === "miss"
+                            ? "text-amber-300"
+                            : "text-red-300",
+                      ].join(" ")}
+                    >
+                      {vfFeedback === "correct" ? "Locked." : vfFeedback === "miss" ? "Missed signal." : "Wrong direction."}
+                    </p>
+                  )}
+                </div>
+
+                <p className="mt-5 text-center text-sm text-zinc-500">
+                  The highlighted vector is the signal. The surrounding field is noise.
+                </p>
+              </>
+            )}
+
+            {vfPhase === "result" && (
+              <ResultCard
+                label="Vector session complete"
+                score={vfStats.finalScore}
+                scoreLabel="Attention score"
+                metrics={[
+                  { label: "Correct", value: vfStats.correct },
+                  { label: "Mistakes", value: vfStats.mistakes },
+                  { label: "Misses", value: vfStats.misses },
+                  { label: "Accuracy", value: `${vfAccuracy}%` },
+                  { label: "Conflict accuracy", value: `${vfConflictAccuracy}%` },
+                  { label: "Best streak", value: vfStats.bestStreak },
+                  { label: "Avg response", value: vfAvgResponseMs > 0 ? `${vfAvgResponseMs}ms` : "—" },
+                ]}
+                note="Score rewards selective attention, fast direction reading, conflict-field accuracy, streak control, and suppressing distracting vectors."
+                onPlayAgain={startVectorField}
+                onChooseDrill={goToSelection}
+                chooseDrillLabel="Choose Drill"
+              />
+            )}
+          </div>
+        )}
+      </DrillShell>
+    );
+  }
+
+
 }
